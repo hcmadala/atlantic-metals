@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Product</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/store.css">
+    <link rel="stylesheet" href="css/product.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- CART DRAWER -->
+    <div class="cart-overlay" id="cartOverlay"></div>
+    <div class="cart-drawer" id="cartDrawer">
+        <div class="cart-drawer-header">
+            <h2>Your Cart</h2>
+            <button class="cart-close-btn" id="cartCloseBtn">✕</button>
+        </div>
+        <div class="cart-drawer-items" id="cartDrawerItems"></div>
+        <div class="cart-drawer-footer">
+            <div class="cart-total-row">
+                <span>Total</span>
+                <span id="cartTotal">$0.00</span>
+            </div>
+            <button class="checkout-btn">Checkout</button>
+        </div>
+    </div>
+
+    <div class="sticky-wrapper">
+
+        <div class="ticker">
+            <a href="gold.html" class="metal-card">
+                <div class="metal-info">
+                    <span class="metal-name gold-text">Gold</span>
+                    <span id="gold-price" class="metal-price gold">--</span>
+                    <canvas id="gold-chart" width="60" height="18"></canvas>
+                    <span id="gold-arrow" class="arrow unchanged">•</span>
+                    <span id="gold-change" class="metal-change">--</span>
+                </div>
+            </a>
+            <a href="silver.html" class="metal-card">
+                <div class="metal-info">
+                    <span class="metal-name silver-text">Silver</span>
+                    <span id="silver-price" class="metal-price silver">--</span>
+                    <canvas id="silver-chart" width="60" height="18"></canvas>
+                    <span id="silver-arrow" class="arrow unchanged">•</span>
+                    <span id="silver-change" class="metal-change">--</span>
+                </div>
+            </a>
+            <a href="platinum.html" class="metal-card">
+                <div class="metal-info">
+                    <span class="metal-name platinum-text">Platinum</span>
+                    <span id="platinum-price" class="metal-price platinum">--</span>
+                    <canvas id="platinum-chart" width="60" height="18"></canvas>
+                    <span id="platinum-arrow" class="arrow unchanged">•</span>
+                    <span id="platinum-change" class="metal-change">--</span>
+                </div>
+            </a>
+            <a href="palladium.html" class="metal-card">
+                <div class="metal-info">
+                    <span class="metal-name palladium-text">Palladium</span>
+                    <span id="palladium-price" class="metal-price palladium">--</span>
+                    <canvas id="palladium-chart" width="60" height="18"></canvas>
+                    <span id="palladium-arrow" class="arrow unchanged">•</span>
+                    <span id="palladium-change" class="metal-change">--</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="navbar">
+            <a href="index.html" class="brand">Atlantic Metals</a>
+            <div class="navbar-right">
+                <div class="nav-search-wrap">
+                    <input type="text" class="nav-search" id="navSearch" placeholder="Search products...">
+                    <span class="nav-search-icon">🔍</span>
+                </div>
+                <a href="login.html" class="nav-login" id="navAccount">Login</a>
+                <a class="nav-cart" id="cartBtn">
+                    🛒 Cart
+                    <span class="cart-count" id="cartCount">0</span>
+                </a>
+            </div>
+        </div>
+
+        <nav class="metal-menu">
+            <div class="metal-item">
+                <a href="products.html">Shop All</a>
+            </div>
+            <div class="metal-item">
+                <a href="products.html?metal=gold">Gold</a>
+                <div class="dropdown">
+                    <a href="products.html?metal=gold&type=bars">Bars</a>
+                    <a href="products.html?metal=gold&type=coins">Coins</a>
+                    <a href="products.html?metal=gold&type=rounds">Rounds</a>
+                </div>
+            </div>
+            <div class="metal-item">
+                <a href="products.html?metal=silver">Silver</a>
+                <div class="dropdown">
+                    <a href="products.html?metal=silver&type=bars">Bars</a>
+                    <a href="products.html?metal=silver&type=coins">Coins</a>
+                    <a href="products.html?metal=silver&type=rounds">Rounds</a>
+                </div>
+            </div>
+            <div class="metal-item">
+                <a href="products.html?metal=platinum">Platinum</a>
+                <div class="dropdown">
+                    <a href="products.html?metal=platinum&type=bars">Bars</a>
+                    <a href="products.html?metal=platinum&type=coins">Coins</a>
+                    <a href="products.html?metal=platinum&type=rounds">Rounds</a>
+                </div>
+            </div>
+            <div class="metal-item">
+                <a href="products.html?metal=palladium">Palladium</a>
+                <div class="dropdown">
+                    <a href="products.html?metal=palladium&type=bars">Bars</a>
+                    <a href="products.html?metal=palladium&type=coins">Coins</a>
+                    <a href="products.html?metal=palladium&type=rounds">Rounds</a>
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <div class="product-page">
+        <div class="product-detail" id="productDetail"></div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/product.js"></script>
+    <script src="js/script.js"></script>
+    <script src="js/cart.js"></script>
+
+</body>
+</html>

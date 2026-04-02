@@ -1,0 +1,108 @@
+body {
+    margin: 0;
+    font-family: 'JetBrains Mono', monospace;
+    background-color: #1a1a1a;
+    color: #ffffff;
+}
+
+.ticker {
+    display: flex;
+    position: sticky;
+    top: 0;
+    width: 100%;
+    background-color: #1A1C1E;
+    border-bottom: 1px solid #2D3135;
+
+    padding: 10px 14px;
+    gap: 12px;
+
+    box-sizing: border-box;
+    z-index: 1000;
+}
+
+.metal-card {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 10px 12px;
+
+    background-color: #111214;
+    border-radius: 10px;
+
+    text-decoration: none;
+    color: inherit;
+
+    transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.metal-card:hover {
+    background-color: #222426;
+    transform: translateY(-2px);
+}
+
+.flash-green {
+    animation: cardFlashGreen 0.35s ease;
+}
+
+.flash-red {
+    animation: cardFlashRed 0.35s ease;
+}
+
+@keyframes cardFlashGreen {
+    0% { background-color: rgba(74,222,128,0.45); }
+    100% { background-color: #111214; }
+}
+
+@keyframes cardFlashRed {
+    0% { background-color: rgba(248,113,113,0.45); }
+    100% { background-color: #111214; }
+}
+
+.metal-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.metal-name {
+    color: #94A3B8;
+    font-weight: 600;
+}
+
+.metal-price {
+    font-weight: 600;
+    min-width: 70px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.arrow {
+    font-weight: bold;
+    width: 12px;
+    text-align: center;
+}
+
+.arrow.positive { color: #4ADE80; }
+.arrow.negative { color: #F87171; }
+.arrow.unchanged { color: #94A3B8; }
+
+.metal-change {
+    min-width: 55px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.sparkline-container {
+    width: 80px;
+    height: 30px;
+}
+
+canvas.sparkline {
+    width: 100%;
+    height: 100%;
+    display: block;
+}

@@ -1,0 +1,19 @@
+{
+  "name": "precious-metals-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "install": "^0.13.0",
+    "node-fetch": "^2.7.0",
+    "node-fetch2": "^1.6.3"
+  }
+}
