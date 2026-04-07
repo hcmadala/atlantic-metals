@@ -25,24 +25,52 @@ function render(){
         const card=document.createElement("div");
         card.className="product-card";
 
+        const lowestPrice = typeof getLowestPrice==="function"
+            ? getLowestPrice(p.metal, p.type)
+            : p.price;
+
+        const tiers = typeof getPricingTiers==="function"
+            ? getPricingTiers(p.metal, p.type)
+            : [];
+
+        const tiersHTML = tiers.map((t, i)=>`
+            <tr class="${i===0 ? "active-tier" : ""}">
+                <td>${t.label}</td>
+                <td>$${t.wire.toFixed(2)} CAD</td>
+            </tr>
+        `).join("");
+
         card.innerHTML=`
         <div class="availability ${p.available?"in-stock":"out-stock"}">
             ${p.available?"In Stock":"Out of Stock"}
         </div>
-        <a href="product.html?id=${products.indexOf(p)}" class="card-link">
+        <a href="product.html?id=${p.id}" class="card-link">
             <div class="product-img-wrap">
                 <img src="${p.image}" alt="${p.name}">
+                <div class="pricing-table-wrap">
+                    <table class="pricing-table">
+                        <thead>
+                            <tr>
+                                <th>Quantity</th>
+                                <th>Price</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tiersHTML}</tbody>
+                    </table>
+                </div>
             </div>
             <h3>${p.name}</h3>
         </a>
-        <p class="card-price">$${p.price.toLocaleString()}</p>
+        <p class="card-price">As Low As <strong>$${lowestPrice.toFixed(2)} CAD</strong></p>
         <div class="card-bottom">
             <div class="card-qty">
                 <button class="qty-btn" onclick="changeQty(this,-1)">−</button>
                 <span class="qty-value">1</span>
                 <button class="qty-btn" onclick="changeQty(this,1)">+</button>
             </div>
-            <button class="add-to-cart-btn" onclick="addToCart(${products.indexOf(p)},this)">Add to Cart</button>
+            <button class="add-to-cart-btn" ${!p.available?"disabled":""} onclick="addToCart(${p.id},this)">
+                ${p.available?"Add to Cart":"Out of Stock"}
+            </button>
         </div>
         `;
 
@@ -215,6 +243,15 @@ function applyFilters(){
         temp=temp.filter(p=>selectedWeights.includes(p.weight));
     }
 
+    const query = searchInput?.value.trim().toLowerCase() || "";
+    if(query){
+        temp=temp.filter(p=>
+            p.name.toLowerCase().includes(query)||
+            p.metal.toLowerCase().includes(query)||
+            p.type.toLowerCase().includes(query)
+        );
+    }
+
     filtered=temp;
     applySort();
     render();
@@ -242,27 +279,7 @@ const searchInput=document.getElementById("navSearch");
 
 if(searchInput){
     searchInput.addEventListener("input",()=>{
-        const query=searchInput.value.trim().toLowerCase();
-
-        if(query===""){
-            applyFilters();
-            return;
-        }
-
-        let base;
-        if(metal){
-            base=products.filter(p=>p.metal===metal);
-        }else{
-            base=[...products];
-        }
-
-        filtered=base.filter(p=>
-            p.name.toLowerCase().includes(query)||
-            p.metal.toLowerCase().includes(query)||
-            p.type.toLowerCase().includes(query)
-        );
-
-        render();
+        applyFilters();
     });
 }
 
@@ -284,21 +301,43 @@ if(breadcrumb){
 }
 
 /* CART */
-function changeQty(btn,delta){
-    const qtyEl=btn.parentElement.querySelector(".qty-value");
-    let qty=parseInt(qtyEl.innerText);
-    qty=Math.max(1,qty+delta);
-    qtyEl.innerText=qty;
+function changeQty(btn, delta){
+    const qtyEl = btn.parentElement.querySelector(".qty-value");
+    let qty = parseInt(qtyEl.innerText);
+    qty = Math.max(1, qty + delta);
+    qtyEl.innerText = qty;
+
+    // Update active tier highlight
+    const card = btn.closest(".product-card");
+    const addBtn = card.querySelector(".add-to-cart-btn");
+    const idMatch = addBtn.getAttribute("onclick").match(/\d+/);
+    if(!idMatch) return;
+    const pid = parseInt(idMatch[0]);
+    const prod = products.find(pr => pr.id === pid);
+    if(!prod) return;
+
+    const tiers = typeof getPricingTiers==="function" ? getPricingTiers(prod.metal, prod.type) : [];
+    const rows = card.querySelectorAll(".pricing-table tbody tr");
+
+    rows.forEach((row, i) => {
+        const tier = tiers[i];
+        if(!tier) return;
+        const parts = tier.label.includes("+")
+            ? [parseInt(tier.label), Infinity]
+            : tier.label.split(" - ").map(Number);
+        const isActive = qty >= parts[0] && qty <= parts[1];
+        row.classList.toggle("active-tier", isActive);
+    });
 }
 
-function addToCart(index,btn){
+function addToCart(id, btn){
     const qty=parseInt(btn.parentElement.querySelector(".qty-value").innerText);
     const cart=JSON.parse(localStorage.getItem("cart")||"[]");
-    const existing=cart.find(i=>i.id===index);
+    const existing=cart.find(i=>i.id===id);
     if(existing){
         existing.qty+=qty;
     }else{
-        cart.push({id:index,qty:qty});
+        cart.push({id:id,qty:qty});
     }
     localStorage.setItem("cart",JSON.stringify(cart));
     updateCartCount();

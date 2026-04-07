@@ -1,14 +1,153 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Atlantic Metals - Login</title>
+    <title>Login – Atlantic Metals</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/store.css">
-    <link rel="stylesheet" href="css/login.css">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        .auth-page {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 40px 20px 60px;
+        }
+        .auth-box {
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 14px;
+            padding: 36px 40px 40px;
+            width: 100%;
+            max-width: 440px;
+        }
+        .auth-box h2 {
+            color: #c9a84c;
+            margin-bottom: 6px;
+            font-size: 22px;
+        }
+        .auth-box > p {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 24px;
+        }
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .auth-tab {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #555;
+            font-size: 14px;
+            padding: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            border-bottom: 2px solid transparent;
+            transition: 0.2s;
+        }
+        .auth-tab.active {
+            color: #c9a84c;
+            border-bottom: 2px solid #c9a84c;
+        }
+        .auth-form { display: none; flex-direction: column; gap: 12px; }
+        .auth-form.active { display: flex; }
+        .name-row { display: flex; gap: 10px; }
+        .name-row input { flex: 1; min-width: 0; }
+        .auth-form input {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #fff;
+            padding: 11px 14px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border 0.2s;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .auth-form input:focus { border-color: #c9a84c; }
+        .auth-form input.input-error { border-color: #f87171; }
+        .auth-submit {
+            background: #c9a84c;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 13px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            margin-top: 4px;
+            transition: opacity 0.2s;
+        }
+        .auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+        .auth-submit:hover:not(:disabled) { opacity: 0.85; }
+        .auth-error {
+            color: #f87171;
+            font-size: 13px;
+            min-height: 18px;
+        }
+        .verify-box {
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+            text-align: center;
+        }
+        .verify-box.active { display: flex; }
+        .verify-icon { font-size: 40px; }
+        .verify-title { color: #c9a84c; font-size: 18px; font-weight: 600; }
+        .verify-msg { color: #888; font-size: 13px; line-height: 1.7; margin: 0; }
+        .verify-msg span { color: #fff; }
+        .verify-token-row { display: flex; gap: 8px; }
+        .verify-token-row input {
+            flex: 1;
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #fff;
+            padding: 11px 14px;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+            letter-spacing: 4px;
+            text-align: center;
+            transition: border 0.2s;
+            box-sizing: border-box;
+        }
+        .verify-token-row input:focus { border-color: #c9a84c; }
+        .verify-token-row button {
+            background: #c9a84c;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 11px 18px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+        .verify-token-row button:hover { opacity: 0.85; }
+        .resend-btn {
+            background: none;
+            border: none;
+            color: #c9a84c;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+            text-decoration: underline;
+        }
+        .resend-btn:hover { opacity: 0.8; }
+    </style>
 </head>
 <body>
+    <main>
 
+    <!-- CART DRAWER -->
     <div class="cart-overlay" id="cartOverlay"></div>
     <div class="cart-drawer" id="cartDrawer">
         <div class="cart-drawer-header">
@@ -26,7 +165,6 @@
     </div>
 
     <div class="sticky-wrapper">
-
         <div class="ticker">
             <a href="products.html?metal=gold" class="metal-card">
                 <div class="metal-info">
@@ -65,17 +203,16 @@
                 </div>
             </a>
         </div>
-
         <div class="navbar">
             <a href="index.html" class="brand">Atlantic Metals</a>
             <div class="navbar-right">
                 <div class="nav-search-wrap">
                     <input type="text" class="nav-search" id="navSearch" placeholder="Search products...">
-                    <span class="nav-search-icon">&#128269;</span>
+                    <span class="nav-search-icon">🔍</span>
                 </div>
                 <a href="login.html" class="nav-login" id="navAccount">Login</a>
                 <a class="nav-cart" id="cartBtn">
-                    Cart
+                    🛒 Cart
                     <span class="cart-count" id="cartCount">0</span>
                 </a>
             </div>
@@ -120,112 +257,257 @@
         </nav>
     </div>
 
-    <div class="login-page">
-        <div class="login-card">
-
-            <div class="login-header">
-                <a href="index.html" class="login-brand">Atlantic Metals</a>
-                <h1 class="login-title" id="loginTitle">Welcome back</h1>
-                <p class="login-subtitle" id="loginSubtitle">Sign in to your account</p>
+    <div class="auth-page">
+        <div class="auth-box">
+            <h2>Atlantic Metals</h2>
+            <p>Sign in to track orders and save your details</p>
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="tabSignIn" onclick="switchTab('login')">Sign In</button>
+                <button class="auth-tab" id="tabCreate" onclick="switchTab('register')">Create Account</button>
             </div>
 
-            <div class="login-tabs">
-                <button class="login-tab active" id="tabLogin">Sign In</button>
-                <button class="login-tab" id="tabRegister">Create Account</button>
+            <!-- LOGIN FORM -->
+            <div class="auth-form active" id="loginForm">
+                <input type="email" id="loginEmail" placeholder="Email address">
+                <input type="password" id="loginPassword" placeholder="Password">
+                <div class="auth-error" id="loginError"></div>
+                <button class="auth-submit" id="loginBtn" onclick="doLogin()">Sign In</button>
             </div>
 
-            <div class="login-form" id="loginForm">
-
-                <div class="form-group">
-                    <label for="loginEmail">Email address</label>
-                    <input type="email" id="loginEmail" class="form-input" placeholder="you@example.com">
+            <!-- REGISTER FORM -->
+            <div class="auth-form" id="registerForm">
+                <div class="name-row">
+                    <input type="text" id="regFirstName" placeholder="First name">
+                    <input type="text" id="regLastName" placeholder="Last name">
                 </div>
-
-                <div class="form-group">
-                    <label for="loginPassword">Password</label>
-                    <div class="input-wrap">
-                        <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password">
-                        <button class="show-hide-btn" id="toggleLoginPw" data-target="loginPassword">Show</button>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="rememberMe">
-                        <span>Remember me</span>
-                    </label>
-                    <a href="forgot.html" class="forgot-link">Forgot password?</a>
-                </div>
-
-                <div class="form-error" id="loginError"></div>
-
-                <button class="form-submit" id="loginBtn">Sign In</button>
-
-                <p class="form-switch">
-                    Don't have an account?
-                    <button class="switch-btn" id="switchToRegister">Create one</button>
-                </p>
-
+                <input type="email" id="regEmail" placeholder="Email address">
+                <input type="password" id="regPassword" placeholder="Password (min 6 chars)">
+                <input type="password" id="regConfirm" placeholder="Confirm password">
+                <div class="auth-error" id="registerError"></div>
+                <button class="auth-submit" id="registerBtn" onclick="doRegister()">Create Account</button>
             </div>
 
-            <div class="login-form hidden" id="registerForm">
-
-                <div class="form-row-half">
-                    <div class="form-group">
-                        <label for="regFirstName">First Name</label>
-                        <input type="text" id="regFirstName" class="form-input" placeholder="John">
-                    </div>
-                    <div class="form-group">
-                        <label for="regLastName">Last Name</label>
-                        <input type="text" id="regLastName" class="form-input" placeholder="Smith">
-                    </div>
+            <!-- EMAIL VERIFICATION STATE -->
+            <div class="verify-box" id="verifyBox">
+                <div class="verify-icon">📬</div>
+                <div class="verify-title">Check your email</div>
+                <p class="verify-msg">We sent a 6-digit code to<br><span id="verifyEmailDisplay"></span></p>
+                <div class="verify-token-row">
+                    <input type="text" id="verifyCode" placeholder="000000" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')">
+                    <button onclick="doVerify()">Verify</button>
                 </div>
-
-                <div class="form-group">
-                    <label for="regPhone">Phone Number</label>
-                    <input type="tel" id="regPhone" class="form-input" placeholder="+1 (416) 000-0000">
-                </div>
-
-                <div class="form-group">
-                    <label for="regEmail">Email address</label>
-                    <input type="email" id="regEmail" class="form-input" placeholder="you@example.com">
-                </div>
-
-                <div class="form-group">
-                    <label for="regPassword">Password</label>
-                    <div class="input-wrap">
-                        <input type="password" id="regPassword" class="form-input" placeholder="Create a password">
-                        <button class="show-hide-btn" id="toggleRegPw" data-target="regPassword">Show</button>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="regConfirm">Confirm Password</label>
-                    <div class="input-wrap">
-                        <input type="password" id="regConfirm" class="form-input" placeholder="Repeat your password">
-                        <button class="show-hide-btn" id="toggleRegConfirm" data-target="regConfirm">Show</button>
-                    </div>
-                </div>
-
-                <div class="form-error" id="registerError"></div>
-
-                <button class="form-submit" id="registerBtn">Create Account</button>
-
-                <p class="form-switch">
-                    Already have an account?
-                    <button class="switch-btn" id="switchToLogin">Sign in</button>
-                </p>
-
+                <div class="auth-error" id="verifyError"></div>
+                <button class="resend-btn" onclick="doResend()">Resend code</button>
             </div>
-
         </div>
     </div>
 
+    </main>
+
     <script src="js/data.js"></script>
+    <script src="js/pricing.js"></script>
     <script src="js/script.js"></script>
     <script src="js/cart.js"></script>
-    <script src="js/login.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/footer.js"></script>
+    <script>
+        let pendingEmail = "";
 
+        function switchTab(tab) {
+            document.getElementById("tabSignIn").classList.toggle("active", tab === "login");
+            document.getElementById("tabCreate").classList.toggle("active", tab === "register");
+            document.getElementById("loginForm").classList.toggle("active", tab === "login");
+            document.getElementById("registerForm").classList.toggle("active", tab === "register");
+            document.getElementById("verifyBox").classList.remove("active");
+            document.getElementById("loginError").textContent = "";
+            document.getElementById("registerError").textContent = "";
+        }
+
+        function setLoading(btnId, loading) {
+            const btn = document.getElementById(btnId);
+            btn.disabled = loading;
+            if (btnId === "loginBtn")    btn.textContent = loading ? "Signing in…"  : "Sign In";
+            if (btnId === "registerBtn") btn.textContent = loading ? "Creating…"    : "Create Account";
+        }
+
+        function clearInputErrors(...ids) {
+            ids.forEach(id => document.getElementById(id).classList.remove("input-error"));
+        }
+
+        // ── LOGIN ──────────────────────────────────────────────────────────
+        async function doLogin() {
+            const email    = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+            const errEl    = document.getElementById("loginError");
+            errEl.textContent = "";
+            clearInputErrors("loginEmail", "loginPassword");
+
+            if (!email) {
+                errEl.textContent = "Please enter your email address.";
+                document.getElementById("loginEmail").classList.add("input-error");
+                return;
+            }
+            if (!password) {
+                errEl.textContent = "Please enter your password.";
+                document.getElementById("loginPassword").classList.add("input-error");
+                return;
+            }
+
+            setLoading("loginBtn", true);
+            try {
+                const res  = await fetch("/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    if (data.code === "EMAIL_NOT_FOUND") {
+                        errEl.textContent = "No account found with this email. Want to create one?";
+                        document.getElementById("loginEmail").classList.add("input-error");
+                    } else if (data.code === "WRONG_PASSWORD") {
+                        errEl.textContent = "Incorrect password. Please try again.";
+                        document.getElementById("loginPassword").classList.add("input-error");
+                        document.getElementById("loginPassword").value = "";
+                    } else {
+                        errEl.textContent = data.error || "Something went wrong.";
+                    }
+                    return;
+                }
+                window.location.href = "index.html";
+            } catch {
+                errEl.textContent = "Connection error. Is the server running?";
+            } finally {
+                setLoading("loginBtn", false);
+            }
+        }
+
+        // ── REGISTER ───────────────────────────────────────────────────────
+        async function doRegister() {
+            const firstName = document.getElementById("regFirstName").value.trim();
+            const lastName  = document.getElementById("regLastName").value.trim();
+            const email     = document.getElementById("regEmail").value.trim();
+            const password  = document.getElementById("regPassword").value;
+            const confirm   = document.getElementById("regConfirm").value;
+            const errEl     = document.getElementById("registerError");
+            errEl.textContent = "";
+            clearInputErrors("regFirstName", "regLastName", "regEmail", "regPassword", "regConfirm");
+
+            if (!firstName) {
+                errEl.textContent = "Please enter your first name.";
+                document.getElementById("regFirstName").classList.add("input-error");
+                return;
+            }
+            if (!lastName) {
+                errEl.textContent = "Please enter your last name.";
+                document.getElementById("regLastName").classList.add("input-error");
+                return;
+            }
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                errEl.textContent = "Please enter a valid email address.";
+                document.getElementById("regEmail").classList.add("input-error");
+                return;
+            }
+            if (password.length < 6) {
+                errEl.textContent = "Password must be at least 6 characters.";
+                document.getElementById("regPassword").classList.add("input-error");
+                return;
+            }
+            if (password !== confirm) {
+                errEl.textContent = "Passwords do not match.";
+                document.getElementById("regConfirm").classList.add("input-error");
+                return;
+            }
+
+            setLoading("registerBtn", true);
+            try {
+                const res  = await fetch("/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ firstName, lastName, email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    if (data.code === "EMAIL_EXISTS") {
+                        errEl.textContent = "An account with this email already exists. Try signing in.";
+                        document.getElementById("regEmail").classList.add("input-error");
+                    } else {
+                        errEl.textContent = data.error || "Something went wrong.";
+                    }
+                    return;
+                }
+                // Show verification screen
+                pendingEmail = email;
+                document.getElementById("verifyEmailDisplay").textContent = email;
+                document.getElementById("registerForm").classList.remove("active");
+                document.getElementById("verifyBox").classList.add("active");
+                document.getElementById("tabCreate").classList.remove("active");
+            } catch {
+                errEl.textContent = "Connection error. Is the server running?";
+            } finally {
+                setLoading("registerBtn", false);
+            }
+        }
+
+        // ── VERIFY EMAIL ───────────────────────────────────────────────────
+        async function doVerify() {
+            const code  = document.getElementById("verifyCode").value.trim();
+            const errEl = document.getElementById("verifyError");
+            errEl.textContent = "";
+
+            if (code.length !== 6) {
+                errEl.textContent = "Please enter the full 6-digit code.";
+                return;
+            }
+            try {
+                const res  = await fetch("/auth/verify-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: pendingEmail, code })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    errEl.textContent = data.error || "Invalid or expired code. Try again.";
+                    return;
+                }
+                window.location.href = "index.html";
+            } catch {
+                errEl.textContent = "Connection error. Is the server running?";
+            }
+        }
+
+        async function doResend() {
+            const errEl = document.getElementById("verifyError");
+            errEl.style.color = "#f87171";
+            errEl.textContent = "";
+            try {
+                const res = await fetch("/auth/resend-verification", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: pendingEmail })
+                });
+                if (res.ok) {
+                    errEl.style.color = "#4ade80";
+                    errEl.textContent = "Code resent! Check your inbox.";
+                    setTimeout(() => {
+                        errEl.textContent = "";
+                        errEl.style.color = "#f87171";
+                    }, 4000);
+                }
+            } catch {}
+        }
+
+        // Enter key support
+        document.addEventListener("keydown", e => {
+            if (e.key !== "Enter") return;
+            if (document.getElementById("loginForm").classList.contains("active"))         doLogin();
+            else if (document.getElementById("registerForm").classList.contains("active")) doRegister();
+            else if (document.getElementById("verifyBox").classList.contains("active"))    doVerify();
+        });
+
+        if (new URLSearchParams(window.location.search).get("tab") === "register") {
+            switchTab("register");
+        }
+    </script>
 </body>
 </html>

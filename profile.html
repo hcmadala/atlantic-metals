@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Profile – Atlantic Metals</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/store.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        .profile-page {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+
+        .profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .profile-header h1 {
+            font-size: 24px;
+            color: #fff;
+            margin: 0;
+        }
+
+        .profile-header h1 span { color: #c9a84c; }
+
+        .signout-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #aaa;
+            font-family: inherit;
+            font-size: 13px;
+            padding: 8px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .signout-btn:hover { border-color: #f87171; color: #f87171; }
+
+        /* TABS */
+        .profile-tabs {
+            display: flex;
+            border-bottom: 1px solid #2a2a2a;
+            margin-bottom: 32px;
+        }
+
+        .profile-tab {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #555;
+            font-family: inherit;
+            font-size: 14px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: -1px;
+        }
+
+        .profile-tab:hover { color: #aaa; }
+        .profile-tab.active { color: #c9a84c; border-bottom-color: #c9a84c; }
+
+        /* PANELS */
+        .profile-panel { display: none; }
+        .profile-panel.active { display: block; }
+
+        /* CARD */
+        .profile-card {
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+        }
+
+        .profile-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .profile-card-header h3 {
+            color: #c9a84c;
+            font-size: 14px;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        .edit-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #aaa;
+            font-family: inherit;
+            font-size: 13px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .edit-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+
+        /* FIELD GRID */
+        .field-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .field-full { grid-column: 1 / -1; }
+
+        .field-item label {
+            display: block;
+            color: #555;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 7px;
+        }
+
+        .field-value {
+            color: #fff;
+            font-size: 15px;
+            min-height: 22px;
+        }
+
+        .field-value.muted { color: #444; font-style: italic; font-size: 13px; }
+
+        .add-link {
+            color: #c9a84c;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        .add-link:hover { opacity: 0.8; }
+
+        .field-item input {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border 0.2s;
+        }
+
+        .field-item input:focus { border-color: #c9a84c; }
+        .field-item input.err { border-color: #f87171; }
+
+        .hidden { display: none !important; }
+
+        /* SAVE ROW */
+        .save-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+
+        .save-btn {
+            background: #c9a84c;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 22px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: opacity 0.2s;
+        }
+
+        .save-btn:hover { opacity: 0.85; }
+        .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .cancel-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #aaa;
+            border-radius: 8px;
+            padding: 10px 22px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .cancel-btn:hover { border-color: #888; color: #fff; }
+
+        .field-msg { font-size: 13px; }
+        .field-msg.success { color: #4ade80; }
+        .field-msg.error   { color: #f87171; }
+
+        /* EMPTY STATE */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #444;
+            font-size: 14px;
+            line-height: 2;
+        }
+
+        /* ADD DASHED BUTTON */
+        .add-btn {
+            background: none;
+            border: 1px dashed #333;
+            color: #666;
+            font-family: inherit;
+            font-size: 14px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.2s;
+            text-align: left;
+        }
+
+        .add-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+
+        /* ADDRESSES */
+        .address-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+
+        .address-item {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 16px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .addr-text { color: #ccc; font-size: 14px; line-height: 1.8; flex: 1; }
+        .addr-text strong { color: #fff; }
+
+        .default-badge {
+            display: inline-block;
+            background: rgba(201,168,76,0.12);
+            color: #c9a84c;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-top: 4px;
+        }
+
+        .addr-actions { display: flex; gap: 12px; flex-shrink: 0; }
+
+        .addr-actions button {
+            background: none;
+            border: none;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+            padding: 0;
+        }
+
+        .addr-edit-btn { color: #c9a84c; }
+        .addr-edit-btn:hover { text-decoration: underline; }
+        .addr-del-btn  { color: #f87171; }
+        .addr-del-btn:hover { text-decoration: underline; }
+
+        /* ADDRESS FORM */
+        .addr-form {
+            background: #0d0d0d;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 22px;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .addr-form.open { display: flex; }
+
+        .addr-form input {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border 0.2s;
+        }
+
+        .addr-form input:focus { border-color: #c9a84c; }
+        .addr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* SAVED CARDS */
+        .card-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+
+        .saved-card-item {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 14px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .saved-card-info { display: flex; align-items: center; gap: 14px; }
+        .card-icon { font-size: 24px; }
+
+        .saved-card-details { color: #ccc; font-size: 14px; line-height: 1.6; }
+        .saved-card-details span { color: #555; font-size: 12px; display: block; }
+
+        .card-del-btn {
+            background: none;
+            border: none;
+            color: #f87171;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .card-del-btn:hover { text-decoration: underline; }
+
+        /* CARD INPUT FORM */
+        .card-form {
+            background: #0d0d0d;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 22px;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .card-form.open { display: flex; }
+
+        .card-form input, .card-form select {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border 0.2s;
+        }
+
+        .card-form input:focus,
+        .card-form select:focus { border-color: #c9a84c; }
+        .card-form select option { background: #111; }
+        .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* ORDERS */
+        .orders-list { display: flex; flex-direction: column; gap: 14px; }
+
+        .order-item {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 18px;
+            border-bottom: 1px solid #1a1a1a;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .order-meta { display: flex; flex-direction: column; gap: 2px; }
+        .order-id   { color: #c9a84c; font-size: 13px; font-weight: 700; }
+        .order-date { color: #555; font-size: 12px; }
+
+        .order-status {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .status-pending  { background: rgba(201,168,76,0.12); color: #c9a84c; }
+        .status-complete { background: rgba(74,222,128,0.12); color: #4ade80; }
+        .status-shipped  { background: rgba(96,165,250,0.12); color: #60a5fa; }
+
+        .order-total { color: #fff; font-size: 15px; font-weight: 700; }
+
+        .order-lines { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+
+        .order-line {
+            display: flex;
+            justify-content: space-between;
+            color: #888;
+            font-size: 13px;
+        }
+
+        .order-line span:last-child { color: #c9a84c; }
+    </style>
+</head>
+<body>
+<main>
+
+<!-- CART DRAWER -->
+<div class="cart-overlay" id="cartOverlay"></div>
+<div class="cart-drawer" id="cartDrawer">
+    <div class="cart-drawer-header">
+        <h2>Your Cart</h2>
+        <button class="cart-close-btn" id="cartCloseBtn">✕</button>
+    </div>
+    <div class="cart-drawer-items" id="cartDrawerItems"></div>
+    <div class="cart-drawer-footer">
+        <div class="cart-total-row">
+            <span>Total</span>
+            <span id="cartTotal">$0.00</span>
+        </div>
+        <button class="checkout-btn">Checkout</button>
+    </div>
+</div>
+
+<!-- STICKY NAV -->
+<div class="sticky-wrapper">
+    <div class="ticker">
+        <a href="products.html?metal=gold" class="metal-card">
+            <div class="metal-info">
+                <span class="metal-name gold-text">Gold</span>
+                <span id="gold-price" class="metal-price gold">--</span>
+                <canvas id="gold-chart" width="60" height="18"></canvas>
+                <span id="gold-arrow" class="arrow unchanged">•</span>
+                <span id="gold-change" class="metal-change">--</span>
+            </div>
+        </a>
+        <a href="products.html?metal=silver" class="metal-card">
+            <div class="metal-info">
+                <span class="metal-name silver-text">Silver</span>
+                <span id="silver-price" class="metal-price silver">--</span>
+                <canvas id="silver-chart" width="60" height="18"></canvas>
+                <span id="silver-arrow" class="arrow unchanged">•</span>
+                <span id="silver-change" class="metal-change">--</span>
+            </div>
+        </a>
+        <a href="products.html?metal=platinum" class="metal-card">
+            <div class="metal-info">
+                <span class="metal-name platinum-text">Platinum</span>
+                <span id="platinum-price" class="metal-price platinum">--</span>
+                <canvas id="platinum-chart" width="60" height="18"></canvas>
+                <span id="platinum-arrow" class="arrow unchanged">•</span>
+                <span id="platinum-change" class="metal-change">--</span>
+            </div>
+        </a>
+        <a href="products.html?metal=palladium" class="metal-card">
+            <div class="metal-info">
+                <span class="metal-name palladium-text">Palladium</span>
+                <span id="palladium-price" class="metal-price palladium">--</span>
+                <canvas id="palladium-chart" width="60" height="18"></canvas>
+                <span id="palladium-arrow" class="arrow unchanged">•</span>
+                <span id="palladium-change" class="metal-change">--</span>
+            </div>
+        </a>
+    </div>
+    <div class="navbar">
+        <a href="index.html" class="brand">Atlantic Metals</a>
+        <div class="navbar-right">
+            <div class="nav-search-wrap">
+                <input type="text" class="nav-search" id="navSearch" placeholder="Search products...">
+                <span class="nav-search-icon">🔍</span>
+            </div>
+            <a href="profile.html" class="nav-login" id="navAccount">Account</a>
+            <a class="nav-cart" id="cartBtn">
+                🛒 Cart
+                <span class="cart-count" id="cartCount">0</span>
+            </a>
+        </div>
+    </div>
+    <nav class="metal-menu">
+        <div class="metal-item"><a href="products.html">Shop All</a></div>
+        <div class="metal-item">
+            <a href="products.html?metal=gold">Gold</a>
+            <div class="dropdown">
+                <a href="products.html?metal=gold&type=bars">Bars</a>
+                <a href="products.html?metal=gold&type=coins">Coins</a>
+                <a href="products.html?metal=gold&type=rounds">Rounds</a>
+            </div>
+        </div>
+        <div class="metal-item">
+            <a href="products.html?metal=silver">Silver</a>
+            <div class="dropdown">
+                <a href="products.html?metal=silver&type=bars">Bars</a>
+                <a href="products.html?metal=silver&type=coins">Coins</a>
+                <a href="products.html?metal=silver&type=rounds">Rounds</a>
+            </div>
+        </div>
+        <div class="metal-item">
+            <a href="products.html?metal=platinum">Platinum</a>
+            <div class="dropdown">
+                <a href="products.html?metal=platinum&type=bars">Bars</a>
+                <a href="products.html?metal=platinum&type=coins">Coins</a>
+                <a href="products.html?metal=platinum&type=rounds">Rounds</a>
+            </div>
+        </div>
+        <div class="metal-item">
+            <a href="products.html?metal=palladium">Palladium</a>
+            <div class="dropdown">
+                <a href="products.html?metal=palladium&type=bars">Bars</a>
+                <a href="products.html?metal=palladium&type=coins">Coins</a>
+                <a href="products.html?metal=palladium&type=rounds">Rounds</a>
+            </div>
+        </div>
+    </nav>
+</div>
+
+<!-- PAGE -->
+<div class="profile-page">
+    <div class="profile-header">
+        <h1>My <span>Profile</span></h1>
+        <button class="signout-btn" onclick="signOut()">Sign Out</button>
+    </div>
+
+    <div class="profile-tabs">
+        <button class="profile-tab active" onclick="switchTab('account')">Account</button>
+        <button class="profile-tab" onclick="switchTab('addresses')">Addresses</button>
+        <button class="profile-tab" onclick="switchTab('cards')">Saved Cards</button>
+        <button class="profile-tab" onclick="switchTab('orders')">Orders</button>
+    </div>
+
+    <!-- ── ACCOUNT ─────────────────────────────────────────────────────── -->
+    <div class="profile-panel active" id="panel-account">
+
+        <div class="profile-card">
+            <div class="profile-card-header">
+                <h3>Personal Information</h3>
+                <button class="edit-btn" id="editInfoBtn" onclick="toggleInfoEdit()">Edit</button>
+            </div>
+
+            <!-- VIEW -->
+            <div id="infoView" class="field-grid">
+                <div class="field-item">
+                    <label>First Name</label>
+                    <div class="field-value" id="viewFirstName">Loading…</div>
+                </div>
+                <div class="field-item">
+                    <label>Last Name</label>
+                    <div class="field-value" id="viewLastName">Loading…</div>
+                </div>
+                <div class="field-item">
+                    <label>Email</label>
+                    <div class="field-value" id="viewEmail">Loading…</div>
+                </div>
+                <div class="field-item">
+                    <label>Phone</label>
+                    <div class="field-value" id="viewPhone">Loading…</div>
+                </div>
+            </div>
+
+            <!-- EDIT -->
+            <div id="infoEdit" class="hidden">
+                <div class="field-grid">
+                    <div class="field-item">
+                        <label>First Name</label>
+                        <input type="text" id="editFirstName" placeholder="First name">
+                    </div>
+                    <div class="field-item">
+                        <label>Last Name</label>
+                        <input type="text" id="editLastName" placeholder="Last name">
+                    </div>
+                    <div class="field-item field-full">
+                        <label>Email</label>
+                        <input type="email" id="editEmail" placeholder="Email address">
+                    </div>
+                    <div class="field-item field-full">
+                        <label>Phone <span style="color:#444;font-size:11px;font-weight:normal">(optional)</span></label>
+                        <input type="tel" id="editPhone" placeholder="e.g. +1 (902) 555-0100">
+                    </div>
+                </div>
+                <div class="save-row">
+                    <button class="save-btn" id="saveInfoBtn" onclick="saveInfo()">Save Changes</button>
+                    <button class="cancel-btn" onclick="toggleInfoEdit()">Cancel</button>
+                    <span class="field-msg" id="infoMsg"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-card">
+            <div class="profile-card-header">
+                <h3>Password</h3>
+                <button class="edit-btn" id="editPwBtn" onclick="togglePwEdit()">Change</button>
+            </div>
+
+            <div id="pwView">
+                <div class="field-item">
+                    <label>Password</label>
+                    <div class="field-value">••••••••••••</div>
+                </div>
+            </div>
+
+            <div id="pwEdit" class="hidden">
+                <div class="field-grid">
+                    <div class="field-item field-full">
+                        <label>Current Password</label>
+                        <input type="password" id="currentPw" placeholder="Current password">
+                    </div>
+                    <div class="field-item">
+                        <label>New Password</label>
+                        <input type="password" id="newPw" placeholder="Min 6 characters">
+                    </div>
+                    <div class="field-item">
+                        <label>Confirm New Password</label>
+                        <input type="password" id="confirmPw" placeholder="Repeat new password">
+                    </div>
+                </div>
+                <div class="save-row">
+                    <button class="save-btn" id="savePwBtn" onclick="savePassword()">Update Password</button>
+                    <button class="cancel-btn" onclick="togglePwEdit()">Cancel</button>
+                    <span class="field-msg" id="pwMsg"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ADDRESSES ───────────────────────────────────────────────────── -->
+    <div class="profile-panel" id="panel-addresses">
+        <div class="profile-card">
+            <div class="profile-card-header">
+                <h3>Saved Addresses</h3>
+                <button class="edit-btn" onclick="openAddrForm()">+ Add New</button>
+            </div>
+
+            <div class="addr-form" id="addrForm">
+                <div class="addr-row">
+                    <input type="text" id="addrFirstName" placeholder="First name">
+                    <input type="text" id="addrLastName" placeholder="Last name">
+                </div>
+                <input type="text" id="addrStreet" placeholder="Street address">
+                <input type="text" id="addrStreet2" placeholder="Apt, suite, unit (optional)">
+                <div class="addr-row">
+                    <input type="text" id="addrCity" placeholder="City">
+                    <input type="text" id="addrProvince" placeholder="Province / State">
+                </div>
+                <div class="addr-row">
+                    <input type="text" id="addrPostal" placeholder="Postal / ZIP code">
+                    <input type="text" id="addrCountry" placeholder="Country" value="Canada">
+                </div>
+                <input type="tel" id="addrPhone" placeholder="Phone number">
+                <div class="save-row">
+                    <button class="save-btn" onclick="saveAddress()">Save Address</button>
+                    <button class="cancel-btn" onclick="closeAddrForm()">Cancel</button>
+                    <span class="field-msg" id="addrMsg"></span>
+                </div>
+            </div>
+
+            <div class="address-list" id="addressList">
+                <div class="empty-state">Loading…</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── SAVED CARDS ─────────────────────────────────────────────────── -->
+    <div class="profile-panel" id="panel-cards">
+        <div class="profile-card">
+            <div class="profile-card-header">
+                <h3>Saved Cards</h3>
+            </div>
+            <p style="color:#444;font-size:13px;margin:0 0 20px 0">Only the last 4 digits are stored. Never your full card number.</p>
+
+            <div class="card-form" id="cardForm">
+                <div class="card-row">
+                    <div>
+                        <label style="color:#555;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">Card Brand</label>
+                        <select id="cardBrand">
+                            <option value="">Select brand…</option>
+                            <option value="Visa">Visa</option>
+                            <option value="Mastercard">Mastercard</option>
+                            <option value="Amex">Amex</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="color:#555;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">Last 4 Digits</label>
+                        <input type="text" id="cardLast4" placeholder="e.g. 4242" maxlength="4" oninput="this.value=this.value.replace(/\D/g,'')">
+                    </div>
+                </div>
+                <div class="card-row">
+                    <div>
+                        <label style="color:#555;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">Expiry (MM/YY)</label>
+                        <input type="text" id="cardExpiry" placeholder="MM/YY" maxlength="5">
+                    </div>
+                    <div>
+                        <label style="color:#555;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">Cardholder Name</label>
+                        <input type="text" id="cardName" placeholder="Name on card">
+                    </div>
+                </div>
+                <div class="save-row">
+                    <button class="save-btn" onclick="saveCard()">Save Card</button>
+                    <button class="cancel-btn" onclick="closeCardForm()">Cancel</button>
+                    <span class="field-msg" id="cardMsg"></span>
+                </div>
+            </div>
+
+            <div class="card-list" id="cardList">
+                <div class="empty-state">Loading…</div>
+            </div>
+            <button class="add-btn" id="addCardBtn" onclick="openCardForm()">+ Add a card</button>
+        </div>
+    </div>
+
+    <!-- ── ORDERS ──────────────────────────────────────────────────────── -->
+    <div class="profile-panel" id="panel-orders">
+        <div class="profile-card">
+            <div class="profile-card-header">
+                <h3>Order History</h3>
+            </div>
+            <div class="orders-list" id="ordersList">
+                <div class="empty-state">Loading…</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</main>
+
+<script src="js/data.js"></script>
+<script src="js/pricing.js"></script>
+<script src="js/script.js"></script>
+<script src="js/cart.js"></script>
+<script src="js/footer.js"></script>
+<script>
+
+// ── SIGN OUT ──────────────────────────────────────────────────────────────────
+async function signOut() {
+    if (!confirm("Sign out?")) return;
+    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+    try {
+        await fetch("/cart", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cart })
+        });
+    } catch {}
+    await fetch("/auth/logout", { method: "POST" });
+    localStorage.removeItem("cart");
+    window.location.href = "index.html";
+}
+
+// ── AUTH GUARD + INIT ─────────────────────────────────────────────────────────
+(async () => {
+    const res = await fetch("/auth/me");
+    if (!res.ok) {
+        window.location.href = "login.html";
+        return;
+    }
+    const { user } = await res.json();
+
+    // Update navbar to show first name
+    const navAccount = document.getElementById("navAccount");
+    if (navAccount) {
+        navAccount.textContent = user.name.split(" ")[0];
+        navAccount.href = "profile.html";
+    }
+
+    await loadProfile();
+    await loadOrders();
+})();
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+    document.querySelectorAll(".profile-tab").forEach((t, i) => {
+        const tabs = ["account", "addresses", "cards", "orders"];
+        t.classList.toggle("active", tabs[i] === tab);
+    });
+    document.querySelectorAll(".profile-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("panel-" + tab).classList.add("active");
+}
+
+// ── LOAD PROFILE FROM DB ──────────────────────────────────────────────────────
+async function loadProfile() {
+    try {
+        const res = await fetch("/profile");
+        if (!res.ok) {
+            console.error("GET /profile failed:", res.status, await res.text());
+            return;
+        }
+        const data = await res.json();
+
+        // Populate view fields with real data from DB
+        document.getElementById("viewFirstName").textContent = data.first_name || "—";
+        document.getElementById("viewLastName").textContent  = data.last_name  || "—";
+        document.getElementById("viewEmail").textContent     = data.email      || "—";
+
+        // Phone: show value or a clickable "Add phone number" prompt
+        const phoneEl = document.getElementById("viewPhone");
+        if (data.phone) {
+            phoneEl.textContent = data.phone;
+            phoneEl.className = "field-value";
+        } else {
+            phoneEl.innerHTML = '<span class="add-link" onclick="openPhoneEdit()">+ Add phone number</span>';
+        }
+
+        // Pre-fill edit inputs with the same DB data
+        document.getElementById("editFirstName").value = data.first_name || "";
+        document.getElementById("editLastName").value  = data.last_name  || "";
+        document.getElementById("editEmail").value     = data.email      || "";
+        document.getElementById("editPhone").value     = data.phone      || "";
+
+        renderAddresses(data.addresses   || []);
+        renderCards(data.saved_cards     || []);
+
+    } catch (e) {
+        console.error("Failed to load profile:", e);
+    }
+}
+
+// ── PERSONAL INFO ─────────────────────────────────────────────────────────────
+function toggleInfoEdit() {
+    const editing = !document.getElementById("infoEdit").classList.contains("hidden");
+    document.getElementById("infoView").classList.toggle("hidden", !editing);
+    document.getElementById("infoEdit").classList.toggle("hidden", editing);
+    document.getElementById("editInfoBtn").textContent = editing ? "Edit" : "Cancel";
+    document.getElementById("infoMsg").textContent = "";
+    // Clear any error borders
+    ["editFirstName","editLastName","editEmail","editPhone"].forEach(id =>
+        document.getElementById(id).classList.remove("err")
+    );
+}
+
+function openPhoneEdit() {
+    document.getElementById("infoView").classList.add("hidden");
+    document.getElementById("infoEdit").classList.remove("hidden");
+    document.getElementById("editInfoBtn").textContent = "Cancel";
+    setTimeout(() => document.getElementById("editPhone").focus(), 50);
+}
+
+async function saveInfo() {
+    const firstName = document.getElementById("editFirstName").value.trim();
+    const lastName  = document.getElementById("editLastName").value.trim();
+    const email     = document.getElementById("editEmail").value.trim();
+    const phone     = document.getElementById("editPhone").value.trim();
+    const msg       = document.getElementById("infoMsg");
+    msg.textContent = "";
+    msg.className   = "field-msg";
+
+    // Validation
+    let valid = true;
+    if (!firstName) { document.getElementById("editFirstName").classList.add("err"); valid = false; }
+    if (!lastName)  { document.getElementById("editLastName").classList.add("err");  valid = false; }
+    if (!email)     { document.getElementById("editEmail").classList.add("err");     valid = false; }
+    if (!valid) {
+        msg.textContent = "First name, last name and email are required.";
+        msg.classList.add("error");
+        return;
+    }
+
+    const btn = document.getElementById("saveInfoBtn");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+
+    try {
+        const res  = await fetch("/profile", {
+            method:  "PUT",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ firstName, lastName, email, phone })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            msg.textContent = data.error || "Failed to save.";
+            msg.classList.add("error");
+            return;
+        }
+
+        // Update view with saved values
+        document.getElementById("viewFirstName").textContent = firstName;
+        document.getElementById("viewLastName").textContent  = lastName;
+        document.getElementById("viewEmail").textContent     = email;
+
+        const phoneEl = document.getElementById("viewPhone");
+        if (phone) {
+            phoneEl.textContent = phone;
+            phoneEl.className = "field-value";
+        } else {
+            phoneEl.innerHTML = '<span class="add-link" onclick="openPhoneEdit()">+ Add phone number</span>';
+        }
+
+        msg.textContent = "✓ Saved!";
+        msg.classList.add("success");
+        setTimeout(() => toggleInfoEdit(), 900);
+
+    } catch {
+        msg.textContent = "Connection error.";
+        msg.classList.add("error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Save Changes";
+    }
+}
+
+// ── PASSWORD ──────────────────────────────────────────────────────────────────
+function togglePwEdit() {
+    const editing = !document.getElementById("pwEdit").classList.contains("hidden");
+    document.getElementById("pwView").classList.toggle("hidden", !editing);
+    document.getElementById("pwEdit").classList.toggle("hidden", editing);
+    document.getElementById("editPwBtn").textContent = editing ? "Change" : "Cancel";
+    document.getElementById("currentPw").value = "";
+    document.getElementById("newPw").value = "";
+    document.getElementById("confirmPw").value = "";
+    document.getElementById("pwMsg").textContent = "";
+}
+
+async function savePassword() {
+    const current = document.getElementById("currentPw").value;
+    const newPw   = document.getElementById("newPw").value;
+    const confirm = document.getElementById("confirmPw").value;
+    const msg     = document.getElementById("pwMsg");
+    msg.textContent = "";
+    msg.className   = "field-msg";
+
+    if (!current || !newPw || !confirm) {
+        msg.textContent = "All fields are required.";
+        msg.classList.add("error");
+        return;
+    }
+    if (newPw.length < 6) {
+        msg.textContent = "New password must be at least 6 characters.";
+        msg.classList.add("error");
+        return;
+    }
+    if (newPw !== confirm) {
+        msg.textContent = "New passwords do not match.";
+        msg.classList.add("error");
+        return;
+    }
+
+    const btn = document.getElementById("savePwBtn");
+    btn.disabled = true;
+    btn.textContent = "Updating…";
+
+    try {
+        const res  = await fetch("/profile/password", {
+            method:  "PUT",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ currentPassword: current, newPassword: newPw })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msg.textContent = data.error || "Failed to update.";
+            msg.classList.add("error");
+            return;
+        }
+        msg.textContent = "✓ Password updated!";
+        msg.classList.add("success");
+        setTimeout(togglePwEdit, 900);
+    } catch {
+        msg.textContent = "Connection error.";
+        msg.classList.add("error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Update Password";
+    }
+}
+
+// ── ADDRESSES ─────────────────────────────────────────────────────────────────
+let editingAddrIndex = null;
+
+function renderAddresses(addresses) {
+    const list = document.getElementById("addressList");
+    if (!addresses.length) {
+        list.innerHTML = `<div class="empty-state">📭<br>No saved addresses yet.<br><span style="font-size:12px;color:#333">Click "+ Add New" to add one.</span></div>`;
+        return;
+    }
+    list.innerHTML = addresses.map((a, i) => `
+        <div class="address-item">
+            <div class="addr-text">
+                <strong>${a.firstName} ${a.lastName}</strong><br>
+                ${a.street}${a.street2 ? ", " + a.street2 : ""}<br>
+                ${a.city}, ${a.province} ${a.postal}<br>
+                ${a.country}${a.phone ? "<br>" + a.phone : ""}
+                ${i === 0 ? '<div class="default-badge">Default</div>' : ""}
+            </div>
+            <div class="addr-actions">
+                <button class="addr-edit-btn" onclick="editAddress(${i})">Edit</button>
+                <button class="addr-del-btn"  onclick="deleteAddress(${i})">Remove</button>
+            </div>
+        </div>
+    `).join("");
+}
+
+function openAddrForm(index) {
+    editingAddrIndex = (index !== undefined) ? index : null;
+    const f = document.getElementById("addrForm");
+    f.classList.add("open");
+    if (index === undefined) {
+        // Clear all fields for new address
+        ["addrFirstName","addrLastName","addrStreet","addrStreet2",
+         "addrCity","addrProvince","addrPostal","addrPhone"].forEach(id =>
+            document.getElementById(id).value = ""
+        );
+        document.getElementById("addrCountry").value = "Canada";
+    }
+    document.getElementById("addrMsg").textContent = "";
+    f.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function closeAddrForm() {
+    document.getElementById("addrForm").classList.remove("open");
+    editingAddrIndex = null;
+}
+
+async function editAddress(i) {
+    const res  = await fetch("/profile");
+    const data = await res.json();
+    const a    = (data.addresses || [])[i];
+    if (!a) return;
+    openAddrForm(i);
+    document.getElementById("addrFirstName").value = a.firstName || "";
+    document.getElementById("addrLastName").value  = a.lastName  || "";
+    document.getElementById("addrStreet").value    = a.street    || "";
+    document.getElementById("addrStreet2").value   = a.street2   || "";
+    document.getElementById("addrCity").value      = a.city      || "";
+    document.getElementById("addrProvince").value  = a.province  || "";
+    document.getElementById("addrPostal").value    = a.postal    || "";
+    document.getElementById("addrCountry").value   = a.country   || "Canada";
+    document.getElementById("addrPhone").value     = a.phone     || "";
+}
+
+async function saveAddress() {
+    const addr = {
+        firstName: document.getElementById("addrFirstName").value.trim(),
+        lastName:  document.getElementById("addrLastName").value.trim(),
+        street:    document.getElementById("addrStreet").value.trim(),
+        street2:   document.getElementById("addrStreet2").value.trim(),
+        city:      document.getElementById("addrCity").value.trim(),
+        province:  document.getElementById("addrProvince").value.trim(),
+        postal:    document.getElementById("addrPostal").value.trim(),
+        country:   document.getElementById("addrCountry").value.trim(),
+        phone:     document.getElementById("addrPhone").value.trim(),
+    };
+    const msg = document.getElementById("addrMsg");
+    msg.textContent = "";
+    msg.className   = "field-msg";
+
+    if (!addr.firstName || !addr.street || !addr.city || !addr.postal) {
+        msg.textContent = "First name, street, city and postal code are required.";
+        msg.classList.add("error");
+        return;
+    }
+
+    try {
+        const res  = await fetch("/profile/address", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ addr, index: editingAddrIndex })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msg.textContent = data.error || "Failed to save address.";
+            msg.classList.add("error");
+            return;
+        }
+        renderAddresses(data.addresses);
+        closeAddrForm();
+    } catch {
+        msg.textContent = "Connection error.";
+        msg.classList.add("error");
+    }
+}
+
+async function deleteAddress(i) {
+    if (!confirm("Remove this address?")) return;
+    const res  = await fetch(`/profile/address/${i}`, { method: "DELETE" });
+    const data = await res.json();
+    if (res.ok) renderAddresses(data.addresses);
+}
+
+// ── SAVED CARDS ───────────────────────────────────────────────────────────────
+function renderCards(cards) {
+    const list = document.getElementById("cardList");
+    if (!cards.length) {
+        list.innerHTML = `<div class="empty-state">💳<br>No saved cards yet.</div>`;
+        return;
+    }
+    list.innerHTML = cards.map((c, i) => `
+        <div class="saved-card-item">
+            <div class="saved-card-info">
+                <div class="card-icon">💳</div>
+                <div class="saved-card-details">
+                    ${c.name ? `<strong>${c.name}</strong><br>` : ""}
+                    •••• •••• •••• ${c.last4}
+                    <span>${c.brand} · Expires ${c.expiry}</span>
+                </div>
+            </div>
+            <button class="card-del-btn" onclick="deleteCard(${i})">Remove</button>
+        </div>
+    `).join("");
+}
+
+function openCardForm() {
+    document.getElementById("cardForm").classList.add("open");
+    document.getElementById("addCardBtn").style.display = "none";
+    document.getElementById("cardBrand").value = "";
+    document.getElementById("cardLast4").value = "";
+    document.getElementById("cardExpiry").value = "";
+    document.getElementById("cardName").value = "";
+    document.getElementById("cardMsg").textContent = "";
+}
+
+function closeCardForm() {
+    document.getElementById("cardForm").classList.remove("open");
+    document.getElementById("addCardBtn").style.display = "";
+}
+
+async function saveCard() {
+    const brand  = document.getElementById("cardBrand").value;
+    const last4  = document.getElementById("cardLast4").value.trim();
+    const expiry = document.getElementById("cardExpiry").value.trim();
+    const name   = document.getElementById("cardName").value.trim();
+    const msg    = document.getElementById("cardMsg");
+    msg.textContent = "";
+    msg.className   = "field-msg";
+
+    if (!brand || !last4 || !expiry) {
+        msg.textContent = "Brand, last 4 digits and expiry are required.";
+        msg.classList.add("error");
+        return;
+    }
+    if (!/^\d{4}$/.test(last4)) {
+        msg.textContent = "Last 4 must be exactly 4 digits.";
+        msg.classList.add("error");
+        return;
+    }
+    if (!/^\d{2}\/\d{2}$/.test(expiry)) {
+        msg.textContent = "Expiry must be in MM/YY format.";
+        msg.classList.add("error");
+        return;
+    }
+
+    try {
+        const res  = await fetch("/profile/card", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ card: { brand, last4, expiry, name } })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msg.textContent = data.error || "Failed to save card.";
+            msg.classList.add("error");
+            return;
+        }
+        renderCards(data.saved_cards);
+        closeCardForm();
+    } catch {
+        msg.textContent = "Connection error.";
+        msg.classList.add("error");
+    }
+}
+
+async function deleteCard(i) {
+    if (!confirm("Remove this card?")) return;
+    const res  = await fetch(`/profile/card/${i}`, { method: "DELETE" });
+    const data = await res.json();
+    if (res.ok) renderCards(data.saved_cards);
+}
+
+// ── ORDERS ────────────────────────────────────────────────────────────────────
+async function loadOrders() {
+    const list = document.getElementById("ordersList");
+    try {
+        const res    = await fetch("/orders");
+        const orders = await res.json();
+
+        if (!Array.isArray(orders) || !orders.length) {
+            list.innerHTML = `<div class="empty-state">📦<br>No orders yet.</div>`;
+            return;
+        }
+
+        list.innerHTML = orders.map(o => {
+            const items = typeof o.items === "string" ? JSON.parse(o.items) : o.items;
+            const date  = new Date(o.created_at).toLocaleDateString("en-CA", {
+                year: "numeric", month: "short", day: "numeric"
+            });
+            const statusClass = o.status === "complete" ? "status-complete"
+                              : o.status === "shipped"  ? "status-shipped"
+                              : "status-pending";
+            return `
+                <div class="order-item">
+                    <div class="order-header">
+                        <div class="order-meta">
+                            <span class="order-id">Order #${o.id}</span>
+                            <span class="order-date">${date}</span>
+                        </div>
+                        <span class="order-status ${statusClass}">${o.status}</span>
+                        <span class="order-total">$${Number(o.total).toLocaleString()} CAD</span>
+                    </div>
+                    <div class="order-lines">
+                        ${items.map(item => `
+                            <div class="order-line">
+                                <span>${item.qty}× ${item.name}</span>
+                                <span>$${(item.price * item.qty).toLocaleString()}</span>
+                            </div>
+                        `).join("")}
+                    </div>
+                </div>
+            `;
+        }).join("");
+    } catch (e) {
+        list.innerHTML = `<div class="empty-state">Failed to load orders.</div>`;
+    }
+}
+
+</script>
+</body>
+</html>

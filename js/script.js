@@ -34,8 +34,19 @@ function storeBasePrice(metal, price) {
 
 // Only push new price at interval
 async function fetchAndUpdatePrices() {
-    const response = await fetch("/prices"); // your API endpoint
-    const data = await response.json();
+    let data;
+
+    try {
+        const response = await fetch("/prices");
+        data = await response.json();
+    } catch (e) {
+        data = {
+            XAU: 2900,
+            XAG: 30,
+            XPT: 950,
+            XPD: 1200
+        };
+    }
 
     updateMetal("gold", "XAU", data);
     updateMetal("silver", "XAG", data);

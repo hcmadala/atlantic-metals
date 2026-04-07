@@ -26,10 +26,10 @@
         </div>
     </div>
 
+    <!-- STICKY NAV -->
     <div class="sticky-wrapper">
-
         <div class="ticker">
-            <a href="gold.html" class="metal-card">
+            <a href="products.html?metal=gold" class="metal-card">
                 <div class="metal-info">
                     <span class="metal-name gold-text">Gold</span>
                     <span id="gold-price" class="metal-price gold">--</span>
@@ -38,7 +38,7 @@
                     <span id="gold-change" class="metal-change">--</span>
                 </div>
             </a>
-            <a href="silver.html" class="metal-card">
+            <a href="products.html?metal=silver" class="metal-card">
                 <div class="metal-info">
                     <span class="metal-name silver-text">Silver</span>
                     <span id="silver-price" class="metal-price silver">--</span>
@@ -47,7 +47,7 @@
                     <span id="silver-change" class="metal-change">--</span>
                 </div>
             </a>
-            <a href="platinum.html" class="metal-card">
+            <a href="products.html?metal=platinum" class="metal-card">
                 <div class="metal-info">
                     <span class="metal-name platinum-text">Platinum</span>
                     <span id="platinum-price" class="metal-price platinum">--</span>
@@ -56,7 +56,7 @@
                     <span id="platinum-change" class="metal-change">--</span>
                 </div>
             </a>
-            <a href="palladium.html" class="metal-card">
+            <a href="products.html?metal=palladium" class="metal-card">
                 <div class="metal-info">
                     <span class="metal-name palladium-text">Palladium</span>
                     <span id="palladium-price" class="metal-price palladium">--</span>
@@ -83,9 +83,7 @@
         </div>
 
         <nav class="metal-menu">
-            <div class="metal-item">
-                <a href="products.html">Shop All</a>
-            </div>
+            <div class="metal-item"><a href="products.html">Shop All</a></div>
             <div class="metal-item">
                 <a href="products.html?metal=gold">Gold</a>
                 <div class="dropdown">
@@ -121,14 +119,71 @@
         </nav>
     </div>
 
+    <!-- PRODUCT PAGE -->
     <div class="product-page">
-        <div class="product-detail" id="productDetail"></div>
+
+        <!-- Breadcrumb — same position and size as products.html -->
+        <div class="breadcrumb" id="breadcrumb"></div>
+
+        <div class="product-detail-inner">
+
+            <!-- ── LEFT: thumbnail strip + main photo, both separate ───── -->
+            <div class="product-gallery">
+
+                <!-- Thumbnail column — separate, larger -->
+                <div class="gallery-thumbs">
+                    <button class="gallery-arrow" onclick="scrollThumbs(-1)">▲</button>
+                    <div class="thumbs-viewport">
+                        <div class="thumbs-track" id="thumbsTrack"></div>
+                    </div>
+                    <button class="gallery-arrow" onclick="scrollThumbs(1)">▼</button>
+                </div>
+
+                <!-- Main image — separate, slightly smaller -->
+                <div class="gallery-main">
+                    <img id="mainImage" alt="Product image">
+                </div>
+
+            </div>
+
+            <!-- ── RIGHT: pricing table FIRST, then name/price/qty below ── -->
+            <div class="product-detail-info">
+
+                <!-- Pricing tiers table at the top -->
+                <div id="pricingTable" class="pricing-table-wrap"></div>
+
+                <!-- Name -->
+                <h1 id="productName"></h1>
+
+                <!-- Availability -->
+                <p id="availability"></p>
+
+                <!-- Live price -->
+                <p class="detail-price" id="detailPrice"></p>
+
+                <!-- Qty + Add to Cart -->
+                <div class="detail-qty-row">
+                    <div class="card-qty">
+                        <button class="qty-btn" onclick="changeDetailQty(-1)">−</button>
+                        <span class="qty-value" id="detailQty">1</span>
+                        <button class="qty-btn" onclick="changeDetailQty(1)">+</button>
+                    </div>
+                    <button class="add-to-cart-btn" id="detailCartBtn" onclick="addToCartDetail()">
+                        Add to Cart
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
     </div>
 
     <script src="js/data.js"></script>
-    <script src="js/product.js"></script>
+    <script src="js/pricing.js"></script>
     <script src="js/script.js"></script>
     <script src="js/cart.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/product.js"></script>
     <script src="js/footer.js"></script>
 
 </body>

@@ -1,139 +1,175 @@
 const params = new URLSearchParams(window.location.search);
 const id = parseInt(params.get("id"));
-const p = products[id];
-
-const detail = document.getElementById("productDetail");
+const p  = products.find(prod => prod.id === id);
 
 let currentImageIndex = 0;
-const images = [];
+let images = [];
+let thumbOffset = 0;
+const THUMB_STEP = 110; // thumb height (100) + gap (10)
 
-if(!p){
-    detail.innerHTML = "<p>Product not found.</p>";
+if (!p) {
+    document.getElementById("productName").innerText = "Product not found";
 } else {
-    document.title = p.name;
+    document.title = p.name + " – Atlantic Metals";
 
-    if(p.image) images.push(p.image);
-    if(p.image2) images.push(p.image2);
+    // ── IMAGES ──────────────────────────────────────────────────────────
+    if (p.image)  images.push(p.image);
+    if (p.image2) images.push(p.image2);
 
-    detail.innerHTML = `
-        <div class="breadcrumb">
+    const thumbsTrack = document.getElementById("thumbsTrack");
+    images.forEach((img, i) => {
+        const el = document.createElement("img");
+        el.src       = img;
+        el.alt       = p.name;
+        el.className = "thumb-img" + (i === 0 ? " active-thumb" : "");
+        el.onclick   = () => selectImage(i);
+        thumbsTrack.appendChild(el);
+    });
+
+    document.getElementById("mainImage").src = images[0] || "";
+
+    // ── TEXT ─────────────────────────────────────────────────────────────
+    document.getElementById("productName").innerText = p.name;
+
+    const availability = document.getElementById("availability");
+    availability.className = p.available ? "in-stock" : "out-stock";
+    availability.innerText = p.available ? "✔ In Stock" : "✖ Out of Stock";
+
+    // Specs
+    const specMetal  = document.getElementById("specMetal");
+    const specType   = document.getElementById("specType");
+    const specWeight = document.getElementById("specWeight");
+    if (specMetal)  specMetal.innerText  = p.metal.charAt(0).toUpperCase() + p.metal.slice(1);
+    if (specType)   specType.innerText   = p.type.charAt(0).toUpperCase()  + p.type.slice(1);
+    if (specWeight) specWeight.innerText = p.weight + " oz";
+
+    // Disable Add to Cart if out of stock
+    const cartBtn = document.getElementById("detailCartBtn");
+    if (!p.available) {
+        cartBtn.disabled  = true;
+        cartBtn.innerText = "Out of Stock";
+    }
+
+    // Breadcrumb
+    const bc = document.getElementById("breadcrumb");
+    if (bc) {
+        bc.innerHTML = `
             <a href="index.html">Home</a>
             <span>›</span>
             <a href="products.html">All</a>
             <span>›</span>
             <a href="products.html?metal=${p.metal}">${p.metal.charAt(0).toUpperCase() + p.metal.slice(1)}</a>
             <span>›</span>
-            <a href="products.html?metal=${p.metal}&type=${p.type}">${p.type.charAt(0).toUpperCase() + p.type.slice(1)}</a>
-            <span>›</span>
             <span>${p.name}</span>
-        </div>
+        `;
+    }
 
-        <div class="product-detail-inner">
+    buildPricingTable();
+    updateDetailPrice();
+}
 
-            <div class="product-gallery">
-                <div class="gallery-thumbs">
-                    <button class="gallery-arrow" id="thumbUp" onclick="scrollThumbs(-1)">▲</button>
-                    <div class="thumbs-track" id="thumbsTrack">
-                        ${images.map((img, i) => `
-                            <img
-                                src="${img}"
-                                class="thumb-img ${i === 0 ? 'active-thumb' : ''}"
-                                onclick="selectImage(${i})"
-                                alt="View ${i+1}"
-                            >
-                        `).join("")}
-                    </div>
-                    <button class="gallery-arrow" id="thumbDown" onclick="scrollThumbs(1)">▼</button>
-                </div>
+// ── PRICE — uses live spot via calcWirePrice ──────────────────────────────
+function updateDetailPrice() {
+    const qty  = parseInt(document.getElementById("detailQty").innerText);
+    const wire = calcWirePrice(p.metal, p.type, qty);
+    document.getElementById("detailPrice").innerText =
+        "$" + wire.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " CAD";
+}
 
-                <div class="gallery-main">
-                    <img id="mainImage" src="${images[0]}" alt="${p.name}">
-                </div>
-            </div>
+// ── PRICING TABLE ─────────────────────────────────────────────────────────
+function buildPricingTable() {
+    const tiers = getPricingTiers(p.metal, p.type);
+    const qty   = parseInt(document.getElementById("detailQty").innerText);
 
-            <div class="product-detail-info">
-                <h1>${p.name}</h1>
-                <p class="detail-availability ${p.available ? "in-stock" : "out-stock"}">
-                    ${p.available ? "✔ In Stock" : "✖ Out of Stock"}
-                </p>
-                <p class="detail-price">$${p.price.toLocaleString()}</p>
-
-                <div class="detail-specs">
-                    <div class="spec-row">
-                        <span class="spec-label">Metal</span>
-                        <span class="spec-value">${p.metal.charAt(0).toUpperCase() + p.metal.slice(1)}</span>
-                    </div>
-                    <div class="spec-row">
-                        <span class="spec-label">Type</span>
-                        <span class="spec-value">${p.type.charAt(0).toUpperCase() + p.type.slice(1)}</span>
-                    </div>
-                    <div class="spec-row">
-                        <span class="spec-label">Weight</span>
-                        <span class="spec-value">${p.weight} oz</span>
-                    </div>
-                </div>
-
-                <div class="detail-qty-row">
-                    <div class="card-qty">
-                        <button class="qty-btn" onclick="changeDetailQty(-1)">−</button>
-                        <span class="qty-value" id="detailQty">1</span>
-                        <button class="qty-btn" onclick="changeDetailQty(1)">+</button>
-                    </div>
-                    <button class="add-to-cart-btn detail-cart-btn" id="detailCartBtn" onclick="addToCartDetail()">
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-        </div>
+    document.getElementById("pricingTable").innerHTML = `
+        <table class="pricing-table">
+            <thead>
+                <tr>
+                    <th>Qty</th>
+                    <th>Wire / e-Transfer</th>
+                    <th>Credit / PayPal</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tiers.map(t => {
+                    const parts  = t.label.includes("+")
+                        ? [parseInt(t.label), Infinity]
+                        : t.label.split(" - ").map(Number);
+                    const active = qty >= parts[0] && qty <= parts[1];
+                    return `
+                        <tr class="${active ? "active-tier" : ""}">
+                            <td>${t.label}</td>
+                            <td>$${t.wire.toFixed(2)}</td>
+                            <td>$${t.credit.toFixed(2)}</td>
+                        </tr>
+                    `;
+                }).join("")}
+            </tbody>
+        </table>
     `;
 }
 
-function selectImage(index){
+// ── IMAGE SELECTION ───────────────────────────────────────────────────────
+function selectImage(index) {
     currentImageIndex = index;
-    document.getElementById("mainImage").src = images[index];
+    const mainImg = document.getElementById("mainImage");
+    mainImg.style.opacity = "0";
+    setTimeout(() => {
+        mainImg.src           = images[index];
+        mainImg.style.opacity = "1";
+    }, 100);
     document.querySelectorAll(".thumb-img").forEach((img, i) => {
         img.classList.toggle("active-thumb", i === index);
     });
 }
 
-let thumbOffset = 0;
-
-function scrollThumbs(direction){
-    const track = document.getElementById("thumbsTrack");
+// ── SCROLL THUMBNAILS ─────────────────────────────────────────────────────
+function scrollThumbs(direction) {
+    const track     = document.getElementById("thumbsTrack");
     const maxOffset = Math.max(0, images.length - 2);
-    thumbOffset = Math.max(0, Math.min(maxOffset, thumbOffset + direction));
-    track.style.transform = `translateY(-${thumbOffset * 90}px)`;
+    thumbOffset     = Math.max(0, Math.min(maxOffset, thumbOffset + direction));
+    track.style.transform = `translateY(-${thumbOffset * THUMB_STEP}px)`;
 }
 
-function changeDetailQty(delta){
+// ── QTY CHANGE ────────────────────────────────────────────────────────────
+function changeDetailQty(delta) {
     const el = document.getElementById("detailQty");
-    let qty = parseInt(el.innerText);
-    qty = Math.max(1, qty + delta);
+    let qty  = parseInt(el.innerText);
+    qty      = Math.max(1, qty + delta);
     el.innerText = qty;
+    updateDetailPrice();
+    buildPricingTable();
 }
 
-function addToCartDetail(){
-    const qty = parseInt(document.getElementById("detailQty").innerText);
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+// ── ADD TO CART — saves to server if logged in ────────────────────────────
+async function addToCartDetail() {
+    if (!p.available) return;
+
+    const qty      = parseInt(document.getElementById("detailQty").innerText);
+    const cart     = JSON.parse(localStorage.getItem("cart") || "[]");
     const existing = cart.find(i => i.id === id);
-    if(existing){
+
+    if (existing) {
         existing.qty += qty;
     } else {
-        cart.push({id: id, qty: qty});
+        cart.push({ id: id, qty: qty });
     }
-    localStorage.setItem("cart", JSON.stringify(cart));
+
+    await saveCart(cart);
     updateCartCount();
-    const btn = document.getElementById("detailCartBtn");
+
+    const btn     = document.getElementById("detailCartBtn");
     btn.innerText = "Added!";
     setTimeout(() => btn.innerText = "Add to Cart", 1500);
+
+    if (typeof renderCartDrawer === "function") renderCartDrawer();
 }
 
-function updateCartCount(){
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+function updateCartCount() {
+    const cart  = JSON.parse(localStorage.getItem("cart") || "[]");
     const total = cart.reduce((sum, i) => sum + i.qty, 0);
-    const el = document.getElementById("cartCount");
-    if(el) el.innerText = total;
+    const el    = document.getElementById("cartCount");
+    if (el) el.innerText = total;
 }
 
 updateCartCount();

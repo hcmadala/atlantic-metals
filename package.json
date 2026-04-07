@@ -11,9 +11,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "express": "^5.2.1",
     "install": "^0.13.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.3.3",
+    "mysql2": "^3.20.0",
     "node-fetch": "^2.7.0",
-    "node-fetch2": "^1.6.3"
+    "node-fetch2": "^1.6.3",
+    "nodemailer": "^8.0.4"
   }
 }

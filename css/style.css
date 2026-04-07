@@ -106,3 +106,12 @@ canvas.sparkline {
     height: 100%;
     display: block;
 }
+
+body {
+    margin: 0;
+    background: #0f0f0f;
+}
+
+main {
+    min-height: calc(100vh - 300px);
+}
