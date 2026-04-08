@@ -110,6 +110,17 @@ async function initDB() {
       )
     `);
 
+    // Price history table — stores a datapoint every 5 minutes, kept for 24 hours
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS price_history (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        metal_type VARCHAR(10) NOT NULL,
+        price      DECIMAL(10,4) NOT NULL,
+        timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_metal_time (metal_type, timestamp)
+      )
+    `);
+
     // Migrate existing users table — add new columns if they don't exist yet
     const [cols] = await conn.execute(
       "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'",
@@ -127,14 +138,18 @@ async function initDB() {
 }
 
 initDB()
-  .then(() => console.log("MySQL connected"))
+  .then(() => {
+    console.log("MySQL connected");
+    // Start background price recorder after DB is ready
+    startPriceHistoryWorker();
+  })
   .catch(err => {
     console.error("MySQL error:", err.message);
     console.error("Make sure MySQL is running and the database 'atlanticmetals' exists.");
     console.error("Run in MySQL: CREATE DATABASE atlanticmetals;");
   });
 
-// ─── Auth Middleware ─────────────────────────────────────────────────────────
+// ─── Auth Middleware ──────────────────────────────────────────────────────────
 function authRequired(req, res, next) {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Not logged in" });
@@ -333,7 +348,6 @@ app.put("/cart", authRequired, async (req, res) => {
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
-// GET profile — returns all profile data for the logged-in user
 app.get("/profile", authRequired, async (req, res) => {
   try {
     const [rows] = await pool.execute(
@@ -356,14 +370,12 @@ app.get("/profile", authRequired, async (req, res) => {
   }
 });
 
-// PUT profile — update first name, last name, email, phone
 app.put("/profile", authRequired, async (req, res) => {
   const { firstName, lastName, email, phone } = req.body;
   if (!firstName || !lastName || !email)
     return res.status(400).json({ error: "First name, last name and email are required" });
 
   try {
-    // Make sure email isn't already taken by a different account
     const [existing] = await pool.execute(
       "SELECT id FROM users WHERE email = ? AND id != ?",
       [email, req.user.id]
@@ -382,7 +394,6 @@ app.put("/profile", authRequired, async (req, res) => {
   }
 });
 
-// PUT password — verify current password then update
 app.put("/profile/password", authRequired, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword)
@@ -406,7 +417,6 @@ app.put("/profile/password", authRequired, async (req, res) => {
   }
 });
 
-// POST /profile/address — add new or update existing address
 app.post("/profile/address", authRequired, async (req, res) => {
   const { addr, index } = req.body;
   try {
@@ -414,9 +424,9 @@ app.post("/profile/address", authRequired, async (req, res) => {
     let addresses = rows.length ? parseJSON(rows[0].addresses) : [];
 
     if (index !== null && index !== undefined && index >= 0) {
-      addresses[index] = addr;   // edit existing
+      addresses[index] = addr;
     } else {
-      addresses.push(addr);      // add new
+      addresses.push(addr);
     }
 
     await pool.execute(
@@ -430,7 +440,6 @@ app.post("/profile/address", authRequired, async (req, res) => {
   }
 });
 
-// DELETE /profile/address/:index — remove address by index
 app.delete("/profile/address/:index", authRequired, async (req, res) => {
   const i = parseInt(req.params.index);
   try {
@@ -448,7 +457,6 @@ app.delete("/profile/address/:index", authRequired, async (req, res) => {
   }
 });
 
-// POST /profile/card — save a new card
 app.post("/profile/card", authRequired, async (req, res) => {
   const { card } = req.body;
   try {
@@ -466,7 +474,6 @@ app.post("/profile/card", authRequired, async (req, res) => {
   }
 });
 
-// DELETE /profile/card/:index — remove card by index
 app.delete("/profile/card/:index", authRequired, async (req, res) => {
   const i = parseInt(req.params.index);
   try {
@@ -484,26 +491,119 @@ app.delete("/profile/card/:index", authRequired, async (req, res) => {
   }
 });
 
-// ─── Prices ──────────────────────────────────────────────────────────────────
-let cache = { data: null, timestamp: 0 };
+// ─── Price History Worker ─────────────────────────────────────────────────────
+// Fetches live prices every 5 minutes and saves them to price_history.
+// Automatically deletes records older than 24 hours to keep the table lean.
 
-app.get("/prices", async (req, res) => {
-  const now = Date.now();
-  if (cache.data && now - cache.timestamp < 60000) return res.json(cache.data);
+async function recordPrices() {
   try {
     const metals  = ["XAU", "XAG", "XPT", "XPD"];
     const results = {};
+
     for (const metal of metals) {
       const response = await fetch(`https://api.gold-api.com/price/${metal}`);
       const data     = await response.json();
       results[metal] = data.price;
     }
+
+    // Insert one row per metal
+    const conn = await pool.getConnection();
+    try {
+      for (const [metal, price] of Object.entries(results)) {
+        if (price != null) {
+          await conn.execute(
+            "INSERT INTO price_history (metal_type, price) VALUES (?, ?)",
+            [metal, price]
+          );
+        }
+      }
+
+      // Clean up records older than 24 hours
+      await conn.execute(
+        "DELETE FROM price_history WHERE timestamp < DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+      );
+    } finally {
+      conn.release();
+    }
+
+    // Keep the in-memory cache fresh so the /prices endpoint stays fast
     cache.data      = results;
-    cache.timestamp = now;
-    res.json(results);
+    cache.timestamp = Date.now();
+
+    console.log(`[${new Date().toISOString()}] Price history recorded`);
+  } catch (err) {
+    console.error("Price history worker error:", err.message);
+  }
+}
+
+function startPriceHistoryWorker() {
+  // Run once immediately so there's data right away
+  recordPrices();
+  // Then every 5 minutes (300,000 ms)
+  setInterval(recordPrices, 5 * 60 * 1000);
+  console.log("Price history worker started (runs every 5 minutes)");
+}
+
+// ─── Prices ──────────────────────────────────────────────────────────────────
+// Returns current prices AND the last 30 historical data points per metal,
+// so every client (phone, laptop, etc.) renders the exact same sparkline.
+
+let cache = { data: null, timestamp: 0 };
+
+app.get("/prices", async (req, res) => {
+  const now = Date.now();
+
+  try {
+    // Refresh spot prices if cache is older than 60 seconds
+    if (!cache.data || now - cache.timestamp >= 60000) {
+      const metals  = ["XAU", "XAG", "XPT", "XPD"];
+      const results = {};
+      for (const metal of metals) {
+        const response = await fetch(`https://api.gold-api.com/price/${metal}`);
+        const data     = await response.json();
+        results[metal] = data.price;
+      }
+      cache.data      = results;
+      cache.timestamp = now;
+    }
+
+    // Fetch the last 30 history points per metal from the database
+    const [historyRows] = await pool.execute(`
+      SELECT metal_type, price, timestamp
+      FROM price_history
+      WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      ORDER BY timestamp ASC
+    `);
+
+    // Group history by metal and keep only the most recent 30 points each
+    const history = { XAU: [], XAG: [], XPT: [], XPD: [] };
+    for (const row of historyRows) {
+      if (history[row.metal_type] !== undefined) {
+        history[row.metal_type].push(parseFloat(row.price));
+      }
+    }
+    // Trim to last 30 points per metal
+    for (const metal of Object.keys(history)) {
+      if (history[metal].length > 30) {
+        history[metal] = history[metal].slice(-30);
+      }
+    }
+
+    // Return current prices + historical arrays in a single response
+    res.json({
+      ...cache.data,   // XAU, XAG, XPT, XPD (current spot prices)
+      history          // { XAU: [...], XAG: [...], XPT: [...], XPD: [...] }
+    });
   } catch (error) {
-    console.log("Error fetching prices:", error);
-    res.json({ XAU: null, XAG: null, XPT: null, XPD: null });
+    console.error("Error fetching prices:", error);
+    // Fallback: return last cached data with empty history so the app still works
+    res.json({
+      XAU: cache.data?.XAU ?? null,
+      XAG: cache.data?.XAG ?? null,
+      XPT: cache.data?.XPT ?? null,
+      XPD: cache.data?.XPD ?? null,
+      history: { XAU: [], XAG: [], XPT: [], XPD: [] }
+    });
   }
 });
 
