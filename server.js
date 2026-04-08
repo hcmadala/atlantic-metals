@@ -17,8 +17,8 @@ const JWT_SECRET = "atlanticmetals_secret_2026"; // change this in production
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER || "haradeepchowdarymadala@gmail.com",
-    pass: process.env.EMAIL_PASS || "upim ufrh yulx tzdi"
+    user: process.env.EMAIL_USER || "",
+    pass: process.env.EMAIL_PASS || ""
   }
 });
 
@@ -48,12 +48,14 @@ async function sendVerificationEmail(email, firstName, code) {
 // ─── MySQL Connection Pool ───────────────────────────────────────────────────
 // ⚠️  Update password to match your MySQL setup
 const pool = mysql.createPool({
-  host:     "localhost",
-  user:     "root",
-  password: "Haradeep@2007",          // ← your MySQL password here
-  database: "atlanticmetals",
+  host:            process.env.DB_HOST     || "localhost",
+  port:            process.env.DB_PORT     || 3306,
+  user:            process.env.DB_USER     || "root",
+  password:        process.env.DB_PASS     || "Haradeep@2007",
+  database:        process.env.DB_NAME     || "atlanticmetals",
   waitForConnections: true,
-  connectionLimit: 10
+  connectionLimit: 10,
+  ssl:             process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
 
 // ─── Helper: safely parse JSON columns ───────────────────────────────────────
