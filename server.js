@@ -17,8 +17,16 @@ const JWT_SECRET = "atlanticmetals_secret_2026"; // change this in production
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER || "",
-    pass: process.env.EMAIL_PASS || ""
+    user: process.env.EMAIL_USER || "haradeepchowdarymadala@gmail.com",
+    pass: process.env.EMAIL_PASS || "kpgx sipm rpvx nlyx"
+  }
+});
+
+transporter.verify((error, success) => {
+  if (error) {
+      console.error("Email transporter error:", error.message);
+  } else {
+      console.log("Email transporter ready");
   }
 });
 
@@ -162,6 +170,14 @@ initDB()
     console.error("Run in MySQL: CREATE DATABASE atlanticmetals;");
   });
 
+  // Keep Render free tier awake
+  if (process.env.RENDER_EXTERNAL_URL) {
+    setInterval(() => {
+        fetch(process.env.RENDER_EXTERNAL_URL + "/auth/me")
+            .catch(() => {});
+    }, 10 * 60 * 1000); // ping every 10 minutes
+  }
+
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 function authRequired(req, res, next) {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
@@ -185,7 +201,7 @@ app.post("/auth/register", async (req, res) => {
     if (rows.length > 0)
       return res.status(400).json({ code: "EMAIL_EXISTS", error: "Email already registered" });
 
-    const hashed  = await bcrypt.hash(password, 10);
+    const hashed  = await bcrypt.hash(password, 8);
     const code    = crypto.randomInt(100000, 999999).toString();
     const expires = new Date(Date.now() + 15 * 60 * 1000);
 

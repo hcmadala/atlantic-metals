@@ -47,21 +47,21 @@ function render(){
         <a href="product.html?id=${p.id}" class="card-link">
             <div class="product-img-wrap">
                 <img src="${p.image}" alt="${p.name}">
-                <div class="pricing-table-wrap">
-                    <table class="pricing-table">
-                        <thead>
-                            <tr>
-                                <th>Quantity</th>
-                                <th>Price</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tiersHTML}</tbody>
-                    </table>
-                </div>
             </div>
             <h3>${p.name}</h3>
         </a>
         <p class="card-price">As Low As <strong>$${lowestPrice.toFixed(2)} CAD</strong></p>
+        <div class="pricing-table-wrap">
+            <table class="pricing-table">
+                <thead>
+                    <tr>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>${tiersHTML}</tbody>
+            </table>
+        </div>
         <div class="card-bottom">
             <div class="card-qty">
                 <button class="qty-btn" onclick="changeQty(this,-1)">−</button>

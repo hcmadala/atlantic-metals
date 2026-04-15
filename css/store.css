@@ -325,7 +325,7 @@
     justify-content: space-between;
     transition: 0.2s;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .store-page .product-card:hover {
@@ -367,23 +367,30 @@
     z-index: 1;
 }
 
-/* PRICING OVERLAY — slides up from bottom of image on hover */
+/* PRICING OVERLAY — slides up from above card-bottom on hover */
 .pricing-table-wrap {
     position: absolute;
-    bottom: 0;
+    bottom: 68px;
     left: 0;
     width: 100%;
     background: rgba(10, 10, 10, 0.96);
     border-top: 1px solid #2a2a2a;
+    border-bottom: 1px solid #2a2a2a;
     padding: 6px 8px 8px 8px;
     box-sizing: border-box;
     z-index: 2;
-    transform: translateY(100%);
-    transition: transform 0.25s ease;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    pointer-events: none;
 }
 
 .store-page .product-card:hover .pricing-table-wrap {
+    opacity: 1;
+    visibility: visible;
     transform: translateY(0);
+    pointer-events: auto;
 }
 
 /* PRICING TABLE */

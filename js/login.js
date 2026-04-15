@@ -1,173 +1,186 @@
-const tabLogin = document.getElementById("tabLogin");
-const tabRegister = document.getElementById("tabRegister");
-const loginForm = document.getElementById("loginForm");
-const registerForm = document.getElementById("registerForm");
-const switchToRegister = document.getElementById("switchToRegister");
-const switchToLogin = document.getElementById("switchToLogin");
-const loginTitle = document.getElementById("loginTitle");
-const loginSubtitle = document.getElementById("loginSubtitle");
+let pendingEmail = "";
 
-function showLogin(){
-    loginForm.classList.remove("hidden");
-    registerForm.classList.add("hidden");
-    tabLogin.classList.add("active");
-    tabRegister.classList.remove("active");
-    loginTitle.innerText = "Welcome back";
-    loginSubtitle.innerText = "Sign in to your account";
+// ── Tab switching ──────────────────────────────────────────────────
+function switchTab(tab) {
+    document.getElementById("tabSignIn").classList.toggle("active", tab === "login");
+    document.getElementById("tabCreate").classList.toggle("active", tab === "register");
+    document.getElementById("loginForm").classList.toggle("active", tab === "login");
+    document.getElementById("registerForm").classList.toggle("active", tab === "register");
+    document.getElementById("verifyBox").classList.remove("active");
+    document.getElementById("loginError").textContent = "";
+    document.getElementById("registerError").textContent = "";
 }
 
-function showRegister(){
-    registerForm.classList.remove("hidden");
-    loginForm.classList.add("hidden");
-    tabRegister.classList.add("active");
-    tabLogin.classList.remove("active");
-    loginTitle.innerText = "Create an account";
-    loginSubtitle.innerText = "Join Atlantic Metals today";
+function setLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = loading;
+    if (btnId === "loginBtn")    btn.textContent = loading ? "Signing in…"  : "Sign In";
+    if (btnId === "registerBtn") btn.textContent = loading ? "Creating…"    : "Create Account";
 }
 
-tabLogin.addEventListener("click", showLogin);
-tabRegister.addEventListener("click", showRegister);
-switchToRegister.addEventListener("click", showRegister);
-switchToLogin.addEventListener("click", showLogin);
-
-const urlParams = new URLSearchParams(window.location.search);
-if(urlParams.get("tab") === "register"){
-    showRegister();
+function clearInputErrors(...ids) {
+    ids.forEach(id => document.getElementById(id).classList.remove("input-error"));
 }
 
-function togglePassword(btn){
-    const targetId = btn.dataset.target;
-    const input = document.getElementById(targetId);
-    if(input.type === "password"){
-        input.type = "text";
-        btn.innerText = "Hide";
-    } else {
-        input.type = "password";
-        btn.innerText = "Show";
-    }
-}
-
-document.getElementById("toggleLoginPw").addEventListener("click", function(){
-    togglePassword(this);
-});
-
-document.getElementById("toggleRegPw").addEventListener("click", function(){
-    togglePassword(this);
-});
-
-document.getElementById("toggleRegConfirm").addEventListener("click", function(){
-    togglePassword(this);
-});
-
-function showError(id, msg){
-    const el = document.getElementById(id);
-    el.innerText = msg;
-    el.style.display = "block";
-}
-
-function clearError(id){
-    const el = document.getElementById(id);
-    el.innerText = "";
-    el.style.display = "none";
-}
-
-function isValidEmail(email){
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function isValidPhone(phone){
-    return /^[\d\s\+\-\(\)]{7,15}$/.test(phone);
-}
-
-document.getElementById("loginBtn").addEventListener("click", function(){
-    clearError("loginError");
-
-    const email = document.getElementById("loginEmail").value.trim();
+// ── Login ──────────────────────────────────────────────────────────
+async function doLogin() {
+    const email    = document.getElementById("loginEmail").value.trim();
     const password = document.getElementById("loginPassword").value;
-    const remember = document.getElementById("rememberMe").checked;
+    const errEl    = document.getElementById("loginError");
+    errEl.textContent = "";
+    clearInputErrors("loginEmail", "loginPassword");
 
-    if(!email || !isValidEmail(email)){
-        showError("loginError", "Please enter a valid email address.");
+    if (!email) {
+        errEl.textContent = "Please enter your email address.";
+        document.getElementById("loginEmail").classList.add("input-error");
+        return;
+    }
+    if (!password) {
+        errEl.textContent = "Please enter your password.";
+        document.getElementById("loginPassword").classList.add("input-error");
         return;
     }
 
-    if(!password || password.length < 6){
-        showError("loginError", "Please enter your password.");
-        return;
+    setLoading("loginBtn", true);
+    try {
+        const res  = await fetch("/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            if (data.code === "EMAIL_NOT_FOUND") {
+                errEl.textContent = "No account found with this email.";
+                document.getElementById("loginEmail").classList.add("input-error");
+            } else if (data.code === "WRONG_PASSWORD") {
+                errEl.textContent = "Incorrect password. Please try again.";
+                document.getElementById("loginPassword").classList.add("input-error");
+                document.getElementById("loginPassword").value = "";
+            } else if (data.code === "NOT_VERIFIED") {
+                pendingEmail = email;
+                await fetch("/auth/resend-verification", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email })
+                });
+                document.getElementById("verifyEmailDisplay").textContent = email;
+                document.getElementById("loginForm").classList.remove("active");
+                document.getElementById("verifyBox").classList.add("active");
+                document.getElementById("tabSignIn").classList.remove("active");
+            } else {
+                errEl.textContent = data.error || "Something went wrong.";
+            }
+            return;
+        }
+        window.location.href = "index.html";
+    } catch {
+        errEl.textContent = "Connection error. Is the server running?";
+    } finally {
+        setLoading("loginBtn", false);
     }
+}
 
-    const users = JSON.parse(localStorage.getItem("am_users") || "[]");
-    const user = users.find(u => u.email === email && u.password === password);
-
-    if(!user){
-        showError("loginError", "Incorrect email or password.");
-        return;
-    }
-
-    const session = { firstName: user.firstName, lastName: user.lastName, email: user.email };
-
-    if(remember){
-        localStorage.setItem("am_session", JSON.stringify(session));
-    } else {
-        sessionStorage.setItem("am_session", JSON.stringify(session));
-    }
-
-    window.location.href = "index.html";
-});
-
-document.getElementById("registerBtn").addEventListener("click", function(){
-    clearError("registerError");
-
+// ── Register ───────────────────────────────────────────────────────
+async function doRegister() {
     const firstName = document.getElementById("regFirstName").value.trim();
-    const lastName = document.getElementById("regLastName").value.trim();
-    const phone = document.getElementById("regPhone").value.trim();
-    const email = document.getElementById("regEmail").value.trim();
-    const password = document.getElementById("regPassword").value;
-    const confirm = document.getElementById("regConfirm").value;
+    const lastName  = document.getElementById("regLastName").value.trim();
+    const email     = document.getElementById("regEmail").value.trim();
+    const password  = document.getElementById("regPassword").value;
+    const confirm   = document.getElementById("regConfirm").value;
+    const errEl     = document.getElementById("registerError");
+    errEl.textContent = "";
+    clearInputErrors("regFirstName", "regLastName", "regEmail", "regPassword", "regConfirm");
 
-    if(!firstName){
-        showError("registerError", "Please enter your first name.");
+    if (!firstName) { errEl.textContent = "Please enter your first name."; document.getElementById("regFirstName").classList.add("input-error"); return; }
+    if (!lastName)  { errEl.textContent = "Please enter your last name.";  document.getElementById("regLastName").classList.add("input-error");  return; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = "Please enter a valid email."; document.getElementById("regEmail").classList.add("input-error"); return; }
+    if (password.length < 6) { errEl.textContent = "Password must be at least 6 characters."; document.getElementById("regPassword").classList.add("input-error"); return; }
+    if (password !== confirm) { errEl.textContent = "Passwords do not match."; document.getElementById("regConfirm").classList.add("input-error"); return; }
+
+    setLoading("registerBtn", true);
+    try {
+        const res  = await fetch("/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ firstName, lastName, email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            if (data.code === "EMAIL_EXISTS") {
+                errEl.textContent = "An account with this email already exists.";
+                document.getElementById("regEmail").classList.add("input-error");
+            } else {
+                errEl.textContent = data.error || "Something went wrong.";
+            }
+            return;
+        }
+
+        pendingEmail = email;
+        document.getElementById("verifyEmailDisplay").textContent = email;
+        document.getElementById("registerForm").classList.remove("active");
+        document.getElementById("verifyBox").classList.add("active");
+        document.getElementById("tabCreate").classList.remove("active");
+    } catch {
+        errEl.textContent = "Connection error. Is the server running?";
+    } finally {
+        setLoading("registerBtn", false);
+    }
+}
+
+// ── Verify ─────────────────────────────────────────────────────────
+async function doVerify() {
+    const code  = document.getElementById("verifyCode").value.trim();
+    const errEl = document.getElementById("verifyError");
+    errEl.textContent = "";
+
+    if (code.length !== 6) {
+        errEl.textContent = "Please enter the full 6-digit code.";
         return;
     }
-
-    if(!lastName){
-        showError("registerError", "Please enter your last name.");
-        return;
+    try {
+        const res  = await fetch("/auth/verify-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: pendingEmail, code })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error || "Invalid or expired code."; return; }
+        window.location.href = "index.html";
+    } catch {
+        errEl.textContent = "Connection error.";
     }
+}
 
-    if(!phone || !isValidPhone(phone)){
-        showError("registerError", "Please enter a valid phone number.");
-        return;
-    }
+// ── Resend ─────────────────────────────────────────────────────────
+async function doResend() {
+    const errEl = document.getElementById("verifyError");
+    errEl.style.color = "#f87171";
+    errEl.textContent = "";
+    try {
+        const res = await fetch("/auth/resend-verification", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: pendingEmail })
+        });
+        if (res.ok) {
+            errEl.style.color = "#4ade80";
+            errEl.textContent = "Code resent! Check your inbox.";
+            setTimeout(() => { errEl.textContent = ""; errEl.style.color = "#f87171"; }, 4000);
+        }
+    } catch {}
+}
 
-    if(!email || !isValidEmail(email)){
-        showError("registerError", "Please enter a valid email address.");
-        return;
-    }
-
-    if(!password || password.length < 6){
-        showError("registerError", "Password must be at least 6 characters.");
-        return;
-    }
-
-    if(password !== confirm){
-        showError("registerError", "Passwords do not match.");
-        return;
-    }
-
-    const users = JSON.parse(localStorage.getItem("am_users") || "[]");
-    const exists = users.find(u => u.email === email);
-
-    if(exists){
-        showError("registerError", "An account with this email already exists.");
-        return;
-    }
-
-    users.push({ firstName, lastName, phone, email, password });
-    localStorage.setItem("am_users", JSON.stringify(users));
-
-    const session = { firstName, lastName, email };
-    sessionStorage.setItem("am_session", JSON.stringify(session));
-
-    window.location.href = "index.html";
+// ── Enter key ──────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    if (document.getElementById("loginForm").classList.contains("active"))         doLogin();
+    else if (document.getElementById("registerForm").classList.contains("active")) doRegister();
+    else if (document.getElementById("verifyBox").classList.contains("active"))    doVerify();
 });
+
+if (new URLSearchParams(window.location.search).get("tab") === "register") {
+    switchTab("register");
+}
