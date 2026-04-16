@@ -414,6 +414,24 @@
         }
 
         .order-line span:last-child { color: #c9a84c; }
+
+        .delete-account-btn {
+            background: transparent;
+            border: 1px solid #7f1d1d;
+            color: #f87171;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            transition: 0.2s;
+            margin-top: 24px;
+        }
+
+        .delete-account-btn:hover {
+            background: #7f1d1d;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -633,6 +651,9 @@
                 </div>
             </div>
         </div>
+        <button class="delete-account-btn" id="deleteAccountBtn" onclick="deleteAccount()">
+            Delete Account
+        </button>
     </div>
 
     <!-- ── ADDRESSES ───────────────────────────────────────────────────── -->
@@ -1220,6 +1241,32 @@ async function loadOrders() {
         }).join("");
     } catch (e) {
         list.innerHTML = `<div class="empty-state">Failed to load orders.</div>`;
+    }
+}
+
+async function deleteAccount() {
+    const confirmed = confirm(
+        "Are you sure you want to delete your account?\nThis cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch("/auth/account", {
+            method: "DELETE",
+            credentials: "same-origin"  
+        });
+
+        const data = await res.json();
+        console.log("Delete response:", res.status, data);
+
+        if (res.ok) {
+            window.location.href = "login.html";
+        } else {
+            alert(data.error || "Something went wrong. Please try again.");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Connection error. Is the server running?");
     }
 }
 

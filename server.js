@@ -11,7 +11,7 @@ app.use(express.static(__dirname));
 app.use(express.json());
 app.use(cookieParser());
 
-const JWT_SECRET = "atlanticmetals_secret_2026"; // change this in production
+const JWT_SECRET = "atlanticmetals_secret_2026";
 
 // ─── Email Transporter ───────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
@@ -23,11 +23,8 @@ const transporter = nodemailer.createTransport({
 });
 
 transporter.verify((error, success) => {
-  if (error) {
-      console.error("Email transporter error:", error.message);
-  } else {
-      console.log("Email transporter ready");
-  }
+  if (error) console.error("Email transporter error:", error.message);
+  else        console.log("Email transporter ready");
 });
 
 async function sendVerificationEmail(email, firstName, code) {
@@ -53,20 +50,19 @@ async function sendVerificationEmail(email, firstName, code) {
   }
 }
 
-// ─── MySQL Connection Pool ───────────────────────────────────────────────────
-// ⚠️  Update password to match your MySQL setup
+// ─── MySQL Connection Pool ────────────────────────────────────────────────────
 const pool = mysql.createPool({
-  host:            process.env.DB_HOST     || "localhost",
-  port:            process.env.DB_PORT     || 3306,
-  user:            process.env.DB_USER     || "root",
-  password:        process.env.DB_PASS     || "Haradeep@2007",
-  database:        process.env.DB_NAME     || "atlanticmetals",
+  host:            process.env.DB_HOST || "localhost",
+  port:            process.env.DB_PORT || 3306,
+  user:            process.env.DB_USER || "root",
+  password:        process.env.DB_PASS || "Haradeep@2007",
+  database:        process.env.DB_NAME || "atlanticmetals",
   waitForConnections: true,
   connectionLimit: 10,
   ssl:             process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
 
-// ─── Helper: safely parse JSON columns ───────────────────────────────────────
+// ─── Helper ───────────────────────────────────────────────────────────────────
 function parseJSON(v, fallback = []) {
   if (!v) return fallback;
   if (typeof v === "string") {
@@ -75,17 +71,16 @@ function parseJSON(v, fallback = []) {
   return v;
 }
 
-// ─── Create / Migrate Tables ─────────────────────────────────────────────────
+// ─── Create / Migrate Tables ──────────────────────────────────────────────────
 async function initDB() {
   const conn = await pool.getConnection();
   try {
-    // Users table
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id              INT AUTO_INCREMENT PRIMARY KEY,
         first_name      VARCHAR(100) NOT NULL,
         last_name       VARCHAR(100) NOT NULL,
-        email           VARCHAR(255) NOT NULL UNIQUE,
+        email           VARCHAR(255) NOT NULL,
         phone           VARCHAR(30),
         password        VARCHAR(255) NOT NULL,
         verified        TINYINT(1) DEFAULT 0,
@@ -93,11 +88,11 @@ async function initDB() {
         verify_expires  DATETIME,
         addresses       JSON,
         saved_cards     JSON,
+        deleted_at      TIMESTAMP NULL DEFAULT NULL,
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Orders table
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS orders (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -110,7 +105,6 @@ async function initDB() {
       )
     `);
 
-    // Carts table
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS carts (
         user_id    INT PRIMARY KEY,
@@ -120,7 +114,6 @@ async function initDB() {
       )
     `);
 
-    // Price history table — stores a datapoint every 5 minutes, kept for 24 hours
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS price_history (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -131,8 +124,6 @@ async function initDB() {
       )
     `);
 
-    // NY Close table — stores COMEX closing price (5 PM EST each business day)
-    // One row per metal per date. Used as baseline for the daily change ticker.
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS ny_close (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -143,7 +134,7 @@ async function initDB() {
       )
     `);
 
-    // Migrate existing users table — add new columns if they don't exist yet
+    // ─── Migrations ───────────────────────────────────────────────────────────
     const [cols] = await conn.execute(
       "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'"
     );
@@ -151,6 +142,16 @@ async function initDB() {
     if (!existing.includes("phone"))       await conn.execute("ALTER TABLE users ADD COLUMN phone VARCHAR(30)");
     if (!existing.includes("addresses"))   await conn.execute("ALTER TABLE users ADD COLUMN addresses JSON");
     if (!existing.includes("saved_cards")) await conn.execute("ALTER TABLE users ADD COLUMN saved_cards JSON");
+    if (!existing.includes("deleted_at"))  await conn.execute("ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+
+    // Remove UNIQUE constraint on email so deleted accounts free up the email
+    // We handle uniqueness in code instead (among non-deleted accounts only)
+    const [indexes] = await conn.execute(
+      "SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'email'"
+    );
+    if (indexes.length > 0) {
+      await conn.execute("ALTER TABLE users DROP INDEX email");
+    }
 
     console.log("MySQL tables ready");
   } finally {
@@ -161,7 +162,6 @@ async function initDB() {
 initDB()
   .then(() => {
     console.log("MySQL connected");
-    // Start background price recorder after DB is ready
     startPriceHistoryWorker();
   })
   .catch(err => {
@@ -170,15 +170,14 @@ initDB()
     console.error("Run in MySQL: CREATE DATABASE atlanticmetals;");
   });
 
-  // Keep Render free tier awake
-  if (process.env.RENDER_EXTERNAL_URL) {
-    setInterval(() => {
-        fetch(process.env.RENDER_EXTERNAL_URL + "/auth/me")
-            .catch(() => {});
-    }, 10 * 60 * 1000); // ping every 10 minutes
-  }
+// Keep Render free tier awake
+if (process.env.RENDER_EXTERNAL_URL) {
+  setInterval(() => {
+    fetch(process.env.RENDER_EXTERNAL_URL + "/auth/me").catch(() => {});
+  }, 10 * 60 * 1000);
+}
 
-// ─── Auth Middleware ──────────────────────────────────────────────────────────
+// ─── Auth Middleware ───────────────────────────────────────────────────────────
 function authRequired(req, res, next) {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Not logged in" });
@@ -190,25 +189,48 @@ function authRequired(req, res, next) {
   }
 }
 
-// ─── Register ────────────────────────────────────────────────────────────────
+// ─── Register ─────────────────────────────────────────────────────────────────
 app.post("/auth/register", async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
   if (!firstName || !lastName || !email || !password)
     return res.status(400).json({ error: "All fields required" });
 
   try {
-    const [rows] = await pool.execute("SELECT id FROM users WHERE email = ?", [email]);
+    // Check if email is in use by a non-deleted account
+    const [rows] = await pool.execute(
+      "SELECT id FROM users WHERE email = ? AND deleted_at IS NULL",
+      [email]
+    );
     if (rows.length > 0)
       return res.status(400).json({ code: "EMAIL_EXISTS", error: "Email already registered" });
+
+    // If a deleted account exists with this email, reuse the row
+    const [deleted] = await pool.execute(
+      "SELECT id FROM users WHERE email = ? AND deleted_at IS NOT NULL",
+      [email]
+    );
 
     const hashed  = await bcrypt.hash(password, 8);
     const code    = crypto.randomInt(100000, 999999).toString();
     const expires = new Date(Date.now() + 15 * 60 * 1000);
 
-    await pool.execute(
-      "INSERT INTO users (first_name, last_name, email, password, verify_code, verify_expires) VALUES (?, ?, ?, ?, ?, ?)",
-      [firstName, lastName, email, hashed, code, expires]
-    );
+    if (deleted.length > 0) {
+      // Reactivate the old row — order history stays linked
+      await pool.execute(
+        `UPDATE users SET
+          first_name = ?, last_name = ?, password = ?,
+          verified = 0, verify_code = ?, verify_expires = ?,
+          phone = NULL, addresses = NULL, saved_cards = NULL,
+          deleted_at = NULL
+         WHERE id = ?`,
+        [firstName, lastName, hashed, code, expires, deleted[0].id]
+      );
+    } else {
+      await pool.execute(
+        "INSERT INTO users (first_name, last_name, email, password, verify_code, verify_expires) VALUES (?, ?, ?, ?, ?, ?)",
+        [firstName, lastName, email, hashed, code, expires]
+      );
+    }
 
     await sendVerificationEmail(email, firstName, code);
     res.json({ success: true, message: "Verification code sent" });
@@ -218,7 +240,7 @@ app.post("/auth/register", async (req, res) => {
   }
 });
 
-// ─── Verify Email ────────────────────────────────────────────────────────────
+// ─── Verify Email ──────────────────────────────────────────────────────────────
 app.post("/auth/verify-email", async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code)
@@ -226,7 +248,7 @@ app.post("/auth/verify-email", async (req, res) => {
 
   try {
     const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE email = ? AND verify_code = ? AND verify_expires > NOW()",
+      "SELECT * FROM users WHERE email = ? AND verify_code = ? AND verify_expires > NOW() AND deleted_at IS NULL",
       [email, code]
     );
     if (rows.length === 0)
@@ -248,14 +270,15 @@ app.post("/auth/verify-email", async (req, res) => {
   }
 });
 
-// ─── Resend Verification ─────────────────────────────────────────────────────
+// ─── Resend Verification ───────────────────────────────────────────────────────
 app.post("/auth/resend-verification", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "Email required" });
 
   try {
     const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE email = ? AND verified = 0", [email]
+      "SELECT * FROM users WHERE email = ? AND verified = 0 AND deleted_at IS NULL",
+      [email]
     );
     if (rows.length === 0)
       return res.status(400).json({ error: "Account not found or already verified" });
@@ -277,14 +300,17 @@ app.post("/auth/resend-verification", async (req, res) => {
   }
 });
 
-// ─── Login ───────────────────────────────────────────────────────────────────
+// ─── Login ─────────────────────────────────────────────────────────────────────
 app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: "Email and password required" });
 
   try {
-    const [rows] = await pool.execute("SELECT * FROM users WHERE email = ?", [email]);
+    const [rows] = await pool.execute(
+      "SELECT * FROM users WHERE email = ? AND deleted_at IS NULL",
+      [email]
+    );
 
     if (rows.length === 0)
       return res.status(400).json({ code: "EMAIL_NOT_FOUND", error: "No account found with this email" });
@@ -307,7 +333,7 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// ─── Logout / Me ─────────────────────────────────────────────────────────────
+// ─── Logout / Me ───────────────────────────────────────────────────────────────
 app.post("/auth/logout", (req, res) => {
   res.clearCookie("token");
   res.json({ success: true });
@@ -317,7 +343,22 @@ app.get("/auth/me", authRequired, (req, res) => {
   res.json({ user: { name: req.user.name, email: req.user.email } });
 });
 
-// ─── Orders ──────────────────────────────────────────────────────────────────
+// ─── Delete Account (soft delete) ─────────────────────────────────────────────
+app.delete("/auth/account", authRequired, async (req, res) => {
+  try {
+    await pool.execute(
+      "UPDATE users SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL",
+      [req.user.id]
+    );
+    res.clearCookie("token");
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ─── Orders ────────────────────────────────────────────────────────────────────
 app.post("/orders", authRequired, async (req, res) => {
   const { items, total } = req.body;
   if (!items || !items.length)
@@ -348,7 +389,7 @@ app.get("/orders", authRequired, async (req, res) => {
   }
 });
 
-// ─── Cart ─────────────────────────────────────────────────────────────────────
+// ─── Cart ──────────────────────────────────────────────────────────────────────
 app.get("/cart", authRequired, async (req, res) => {
   try {
     const [rows] = await pool.execute("SELECT items FROM carts WHERE user_id = ?", [req.user.id]);
@@ -375,12 +416,11 @@ app.put("/cart", authRequired, async (req, res) => {
   }
 });
 
-// ─── Profile ─────────────────────────────────────────────────────────────────
-
+// ─── Profile ───────────────────────────────────────────────────────────────────
 app.get("/profile", authRequired, async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT first_name, last_name, email, phone, addresses, saved_cards FROM users WHERE id = ?",
+      "SELECT first_name, last_name, email, phone, addresses, saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
       [req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: "User not found" });
@@ -406,7 +446,7 @@ app.put("/profile", authRequired, async (req, res) => {
 
   try {
     const [existing] = await pool.execute(
-      "SELECT id FROM users WHERE email = ? AND id != ?",
+      "SELECT id FROM users WHERE email = ? AND id != ? AND deleted_at IS NULL",
       [email, req.user.id]
     );
     if (existing.length)
@@ -431,13 +471,16 @@ app.put("/profile/password", authRequired, async (req, res) => {
     return res.status(400).json({ error: "New password must be at least 6 characters" });
 
   try {
-    const [rows] = await pool.execute("SELECT password FROM users WHERE id = ?", [req.user.id]);
+    const [rows] = await pool.execute(
+      "SELECT password FROM users WHERE id = ? AND deleted_at IS NULL",
+      [req.user.id]
+    );
     if (!rows.length) return res.status(404).json({ error: "User not found" });
 
     const match = await bcrypt.compare(currentPassword, rows[0].password);
     if (!match) return res.status(400).json({ error: "Current password is incorrect" });
 
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const hashed = await bcrypt.hash(newPassword, 8);
     await pool.execute("UPDATE users SET password = ? WHERE id = ?", [hashed, req.user.id]);
     res.json({ success: true });
   } catch (err) {
@@ -449,15 +492,16 @@ app.put("/profile/password", authRequired, async (req, res) => {
 app.post("/profile/address", authRequired, async (req, res) => {
   const { addr, index } = req.body;
   try {
-    const [rows] = await pool.execute("SELECT addresses FROM users WHERE id = ?", [req.user.id]);
+    const [rows] = await pool.execute(
+      "SELECT addresses FROM users WHERE id = ? AND deleted_at IS NULL",
+      [req.user.id]
+    );
     let addresses = rows.length ? parseJSON(rows[0].addresses) : [];
-
     if (index !== null && index !== undefined && index >= 0) {
       addresses[index] = addr;
     } else {
       addresses.push(addr);
     }
-
     await pool.execute(
       "UPDATE users SET addresses = ? WHERE id = ?",
       [JSON.stringify(addresses), req.user.id]
@@ -472,7 +516,10 @@ app.post("/profile/address", authRequired, async (req, res) => {
 app.delete("/profile/address/:index", authRequired, async (req, res) => {
   const i = parseInt(req.params.index);
   try {
-    const [rows] = await pool.execute("SELECT addresses FROM users WHERE id = ?", [req.user.id]);
+    const [rows] = await pool.execute(
+      "SELECT addresses FROM users WHERE id = ? AND deleted_at IS NULL",
+      [req.user.id]
+    );
     let addresses = rows.length ? parseJSON(rows[0].addresses) : [];
     addresses.splice(i, 1);
     await pool.execute(
@@ -489,7 +536,10 @@ app.delete("/profile/address/:index", authRequired, async (req, res) => {
 app.post("/profile/card", authRequired, async (req, res) => {
   const { card } = req.body;
   try {
-    const [rows] = await pool.execute("SELECT saved_cards FROM users WHERE id = ?", [req.user.id]);
+    const [rows] = await pool.execute(
+      "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
+      [req.user.id]
+    );
     let saved_cards = rows.length ? parseJSON(rows[0].saved_cards) : [];
     saved_cards.push(card);
     await pool.execute(
@@ -506,7 +556,10 @@ app.post("/profile/card", authRequired, async (req, res) => {
 app.delete("/profile/card/:index", authRequired, async (req, res) => {
   const i = parseInt(req.params.index);
   try {
-    const [rows] = await pool.execute("SELECT saved_cards FROM users WHERE id = ?", [req.user.id]);
+    const [rows] = await pool.execute(
+      "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
+      [req.user.id]
+    );
     let saved_cards = rows.length ? parseJSON(rows[0].saved_cards) : [];
     saved_cards.splice(i, 1);
     await pool.execute(
@@ -520,60 +573,35 @@ app.delete("/profile/card/:index", authRequired, async (req, res) => {
   }
 });
 
-// ─── Helpers: NY Close timing ────────────────────────────────────────────────
-// Returns true if the current moment is at or just after 5:00 PM EST on a weekday.
-// We capture the close price in a 10-minute window (17:00–17:10 EST) to avoid
-// missing it due to slight polling offsets.
-
+// ─── NY Close Helpers ──────────────────────────────────────────────────────────
 function isNYCloseWindow() {
-  const now = new Date();
-  // Convert to EST (UTC-5) / EDT (UTC-4) — use fixed UTC-5 for COMEX close
-  const estOffset = -5 * 60; // minutes
+  const now        = new Date();
+  const estOffset  = -5 * 60;
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const estMinutes = ((utcMinutes + estOffset) % (24 * 60) + 24 * 60) % (24 * 60);
   const estHour    = Math.floor(estMinutes / 60);
   const estMin     = estMinutes % 60;
-
-  // Weekday only (Mon=1 … Fri=5 in EST)
-  const estDay = new Date(now.getTime() + estOffset * 60000).getUTCDay();
-  const isWeekday = estDay >= 1 && estDay <= 5;
-
-  // Window: 17:00–17:09 EST
-  return isWeekday && estHour === 17 && estMin < 10;
+  const estDay     = new Date(now.getTime() + estOffset * 60000).getUTCDay();
+  return estDay >= 1 && estDay <= 5 && estHour === 17 && estMin < 10;
 }
 
-// Returns the close_date string (YYYY-MM-DD) for the most recent business day
-// as of 5 PM EST — i.e. today if it is past 5 PM EST on a weekday, otherwise
-// the previous business day.
 function getLastCloseDate() {
-  const now = new Date();
+  const now       = new Date();
   const estOffset = -5 * 60;
-  const estTime = new Date(now.getTime() + estOffset * 60000);
-  const estHour = estTime.getUTCHours();
-  const estDay  = estTime.getUTCDay(); // 0=Sun … 6=Sat
-
-  let d = new Date(estTime);
-
-  // If before 5 PM EST today, step back one day
-  if (estHour < 17) d.setUTCDate(d.getUTCDate() - 1);
-
-  // Step back further over weekends
+  const estTime   = new Date(now.getTime() + estOffset * 60000);
+  let d           = new Date(estTime);
+  if (estTime.getUTCHours() < 17) d.setUTCDate(d.getUTCDate() - 1);
   const dow = d.getUTCDay();
-  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2); // Sunday → Friday
-  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1); // Saturday → Friday
-
+  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2);
+  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
 
-// ─── Price History Worker ─────────────────────────────────────────────────────
-// Fetches live prices every 5 minutes, saves them to price_history,
-// and — if we are in the NY Close window — captures the close price.
-
+// ─── Price History Worker ──────────────────────────────────────────────────────
 async function recordPrices() {
   try {
     const metals  = ["XAU", "XAG", "XPT", "XPD"];
     const results = {};
-
     for (const metal of metals) {
       const response = await fetch(`https://api.gold-api.com/price/${metal}`);
       const data     = await response.json();
@@ -582,19 +610,15 @@ async function recordPrices() {
 
     const inCloseWindow = isNYCloseWindow();
     const closeDate     = getLastCloseDate();
+    const conn          = await pool.getConnection();
 
-    const conn = await pool.getConnection();
     try {
       for (const [metal, price] of Object.entries(results)) {
         if (price == null) continue;
-
-        // Always record in price_history
         await conn.execute(
           "INSERT INTO price_history (metal_type, price) VALUES (?, ?)",
           [metal, price]
         );
-
-        // Capture NY Close price if we are in the 17:00–17:09 EST window
         if (inCloseWindow) {
           await conn.execute(
             `INSERT INTO ny_close (metal_type, price, close_date)
@@ -604,8 +628,6 @@ async function recordPrices() {
           );
         }
       }
-
-      // Clean up price_history older than 24 hours
       await conn.execute(
         "DELETE FROM price_history WHERE timestamp < DATE_SUB(NOW(), INTERVAL 24 HOUR)"
       );
@@ -613,12 +635,9 @@ async function recordPrices() {
       conn.release();
     }
 
-    // Keep in-memory cache fresh
     cache.data      = results;
     cache.timestamp = Date.now();
-
-    const closeTag = inCloseWindow ? " [NY CLOSE CAPTURED]" : "";
-    console.log(`[${new Date().toISOString()}] Price history recorded${closeTag}`);
+    console.log(`[${new Date().toISOString()}] Price history recorded${inCloseWindow ? " [NY CLOSE CAPTURED]" : ""}`);
   } catch (err) {
     console.error("Price history worker error:", err.message);
   }
@@ -630,17 +649,12 @@ function startPriceHistoryWorker() {
   console.log("Price history worker started (runs every 5 minutes)");
 }
 
-// ─── Prices ──────────────────────────────────────────────────────────────────
-// Returns current prices AND the last 30 historical data points per metal,
-// so every client (phone, laptop, etc.) renders the exact same sparkline.
-
+// ─── Prices ────────────────────────────────────────────────────────────────────
 let cache = { data: null, timestamp: 0 };
 
 app.get("/prices", async (req, res) => {
   const now = Date.now();
-
   try {
-    // Refresh spot prices if cache is older than 60 seconds
     if (!cache.data || now - cache.timestamp >= 60000) {
       const metals  = ["XAU", "XAG", "XPT", "XPD"];
       const results = {};
@@ -653,7 +667,6 @@ app.get("/prices", async (req, res) => {
       cache.timestamp = now;
     }
 
-    // Fetch the last 30 history points per metal from the database
     const [historyRows] = await pool.execute(`
       SELECT metal_type, price, timestamp
       FROM price_history
@@ -661,21 +674,18 @@ app.get("/prices", async (req, res) => {
       ORDER BY timestamp ASC
     `);
 
-    // Group history by metal, keep last 30 points each
     const history = { XAU: [], XAG: [], XPT: [], XPD: [] };
     for (const row of historyRows) {
-      if (history[row.metal_type] !== undefined) {
+      if (history[row.metal_type] !== undefined)
         history[row.metal_type].push(parseFloat(row.price));
-      }
     }
     for (const metal of Object.keys(history)) {
       if (history[metal].length > 30) history[metal] = history[metal].slice(-30);
     }
 
-    // Fetch the most recent NY Close price for each metal
-    const closeDate = getLastCloseDate();
+    const closeDate  = getLastCloseDate();
     const [closeRows] = await pool.execute(
-      `SELECT metal_type, price FROM ny_close WHERE close_date = ?`,
+      "SELECT metal_type, price FROM ny_close WHERE close_date = ?",
       [closeDate]
     );
     const nyClose = { XAU: null, XAG: null, XPT: null, XPD: null };
@@ -683,15 +693,9 @@ app.get("/prices", async (req, res) => {
       nyClose[row.metal_type] = parseFloat(row.price);
     }
 
-    // Return current prices + history + NY close prices in a single response
-    res.json({
-      ...cache.data,   // XAU, XAG, XPT, XPD (current spot)
-      history,         // { XAU: [...], XAG: [...], XPT: [...], XPD: [...] }
-      nyClose          // { XAU: 3120.50, XAG: 34.10, ... } — same on every device
-    });
+    res.json({ ...cache.data, history, nyClose });
   } catch (error) {
     console.error("Error fetching prices:", error);
-    // Fallback: return last cached data with empty history so the app still works
     res.json({
       XAU: cache.data?.XAU ?? null,
       XAG: cache.data?.XAG ?? null,
