@@ -1,10 +1,13 @@
-const express      = require("express");
-const bcrypt       = require("bcryptjs");
-const jwt          = require("jsonwebtoken");
-const cookieParser = require("cookie-parser");
-const mysql        = require("mysql2/promise");
-const crypto       = require("crypto");
-const nodemailer   = require("nodemailer");
+require("dotenv").config();
+console.log("URL:", process.env.TURSO_DATABASE_URL); 
+const express          = require("express");
+const bcrypt           = require("bcryptjs");
+const jwt              = require("jsonwebtoken");
+const cookieParser     = require("cookie-parser");
+const { createClient } = require("@libsql/client");
+const crypto           = require("crypto");
+const nodemailer       = require("nodemailer");
+const coinsRouter      = require("./routes/coins");
 
 const app = express();
 app.use(express.static(__dirname));
@@ -13,16 +16,22 @@ app.use(cookieParser());
 
 const JWT_SECRET = "atlanticmetals_secret_2026";
 
-// ─── Email Transporter ───────────────────────────────────────────────────────
+// ─── Turso / LibSQL Client ────────────────────────────────────────────────────
+const db = createClient({
+  url:       process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN
+});
+
+// ─── Email Transporter ────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.EMAIL_USER || "haradeepchowdarymadala@gmail.com",
-    pass: process.env.EMAIL_PASS || "kpgx sipm rpvx nlyx"
+    pass: process.env.EMAIL_PASS || "vijo hnyd jaju fwiv"
   }
 });
 
-transporter.verify((error, success) => {
+transporter.verify((error) => {
   if (error) console.error("Email transporter error:", error.message);
   else        console.log("Email transporter ready");
 });
@@ -45,22 +54,11 @@ async function sendVerificationEmail(email, firstName, code) {
         </div>
       `
     });
+    console.log("Email sent to", email);
   } catch (err) {
     console.error("Email send error:", err.message);
   }
 }
-
-// ─── MySQL Connection Pool ────────────────────────────────────────────────────
-const pool = mysql.createPool({
-  host:            process.env.DB_HOST || "localhost",
-  port:            process.env.DB_PORT || 3306,
-  user:            process.env.DB_USER || "root",
-  password:        process.env.DB_PASS || "Haradeep@2007",
-  database:        process.env.DB_NAME || "atlanticmetals",
-  waitForConnections: true,
-  connectionLimit: 10,
-  ssl:             process.env.DB_HOST ? { rejectUnauthorized: false } : false
-});
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function parseJSON(v, fallback = []) {
@@ -71,103 +69,126 @@ function parseJSON(v, fallback = []) {
   return v;
 }
 
-// ─── Create / Migrate Tables ──────────────────────────────────────────────────
+// ─── Create / Migrate Tables ─────────────────────────────────────────────────
+//
+// Key differences from MySQL:
+//   AUTO_INCREMENT → INTEGER PRIMARY KEY AUTOINCREMENT
+//   VARCHAR/TINYINT/DECIMAL/JSON/SMALLINT → TEXT / INTEGER / REAL
+//   TIMESTAMP DEFAULT CURRENT_TIMESTAMP → TEXT DEFAULT (datetime('now'))
+//   JSON_ARRAY() default → '[]'
+//   UNIQUE KEY name (cols) → UNIQUE(cols) inside CREATE TABLE
+//   INDEX inside CREATE TABLE → separate CREATE INDEX statement
+//
 async function initDB() {
-  const conn = await pool.getConnection();
-  try {
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id              INT AUTO_INCREMENT PRIMARY KEY,
-        first_name      VARCHAR(100) NOT NULL,
-        last_name       VARCHAR(100) NOT NULL,
-        email           VARCHAR(255) NOT NULL,
-        phone           VARCHAR(30),
-        password        VARCHAR(255) NOT NULL,
-        verified        TINYINT(1) DEFAULT 0,
-        verify_code     VARCHAR(6),
-        verify_expires  DATETIME,
-        addresses       JSON,
-        saved_cards     JSON,
-        deleted_at      TIMESTAMP NULL DEFAULT NULL,
-        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS orders (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        user_id    INT NOT NULL,
-        items      JSON NOT NULL,
-        total      DECIMAL(10,2) NOT NULL,
-        status     VARCHAR(50) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  // Create all tables in a single batch write
+  await db.batch([
+    {
+      sql: `CREATE TABLE IF NOT EXISTS users (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name     TEXT NOT NULL,
+        last_name      TEXT NOT NULL,
+        email          TEXT NOT NULL,
+        phone          TEXT,
+        password       TEXT NOT NULL,
+        verified       INTEGER DEFAULT 0,
+        verify_code    TEXT,
+        verify_expires TEXT,
+        addresses      TEXT,
+        saved_cards    TEXT,
+        deleted_at     TEXT NULL DEFAULT NULL,
+        created_at     TEXT DEFAULT (datetime('now'))
+      )`,
+      args: []
+    },
+    {
+      sql: `CREATE TABLE IF NOT EXISTS orders (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        items      TEXT NOT NULL,
+        total      REAL NOT NULL,
+        status     TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `);
-
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS carts (
-        user_id    INT PRIMARY KEY,
-        items      JSON NOT NULL DEFAULT (JSON_ARRAY()),
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      )`,
+      args: []
+    },
+    {
+      sql: `CREATE TABLE IF NOT EXISTS carts (
+        user_id    INTEGER PRIMARY KEY,
+        items      TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `);
-
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS price_history (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        metal_type VARCHAR(10) NOT NULL,
-        price      DECIMAL(10,4) NOT NULL,
-        timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_metal_time (metal_type, timestamp)
-      )
-    `);
-
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS ny_close (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        metal_type VARCHAR(10) NOT NULL,
-        price      DECIMAL(10,4) NOT NULL,
-        close_date DATE NOT NULL,
-        UNIQUE KEY unique_metal_date (metal_type, close_date)
-      )
-    `);
-
-    // ─── Migrations ───────────────────────────────────────────────────────────
-    const [cols] = await conn.execute(
-      "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'"
-    );
-    const existing = cols.map(c => c.COLUMN_NAME);
-    if (!existing.includes("phone"))       await conn.execute("ALTER TABLE users ADD COLUMN phone VARCHAR(30)");
-    if (!existing.includes("addresses"))   await conn.execute("ALTER TABLE users ADD COLUMN addresses JSON");
-    if (!existing.includes("saved_cards")) await conn.execute("ALTER TABLE users ADD COLUMN saved_cards JSON");
-    if (!existing.includes("deleted_at"))  await conn.execute("ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
-
-    // Remove UNIQUE constraint on email so deleted accounts free up the email
-    // We handle uniqueness in code instead (among non-deleted accounts only)
-    const [indexes] = await conn.execute(
-      "SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'email'"
-    );
-    if (indexes.length > 0) {
-      await conn.execute("ALTER TABLE users DROP INDEX email");
+      )`,
+      args: []
+    },
+    {
+      sql: `CREATE TABLE IF NOT EXISTS price_history (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        metal_type TEXT NOT NULL,
+        price      REAL NOT NULL,
+        timestamp  TEXT DEFAULT (datetime('now'))
+      )`,
+      args: []
+    },
+    {
+      // Separate CREATE INDEX (not supported inline in SQLite CREATE TABLE)
+      sql: `CREATE INDEX IF NOT EXISTS idx_metal_time ON price_history(metal_type, timestamp)`,
+      args: []
+    },
+    {
+      sql: `CREATE TABLE IF NOT EXISTS ny_close (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        metal_type TEXT NOT NULL,
+        price      REAL NOT NULL,
+        close_date TEXT NOT NULL,
+        UNIQUE(metal_type, close_date)
+      )`,
+      args: []
+    },
+    {
+      sql: `CREATE TABLE IF NOT EXISTS coins (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        slug       TEXT UNIQUE NOT NULL,
+        metal      TEXT NOT NULL,
+        mint       TEXT,
+        weight_oz  REAL,
+        purity     TEXT,
+        year       INTEGER,
+        image_key  TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`,
+      args: []
     }
+  ], "write");
 
-    console.log("MySQL tables ready");
-  } finally {
-    conn.release();
-  }
+  // ─── Migrations (for any existing Turso installs missing columns) ──────────
+  // SQLite uses PRAGMA table_info instead of information_schema
+  const { rows: colRows } = await db.execute({ sql: "PRAGMA table_info(users)", args: [] });
+  const existing = colRows.map(r => r.name);
+
+  const migrations = [];
+  if (!existing.includes("phone"))       migrations.push({ sql: "ALTER TABLE users ADD COLUMN phone TEXT",                         args: [] });
+  if (!existing.includes("addresses"))   migrations.push({ sql: "ALTER TABLE users ADD COLUMN addresses TEXT",                     args: [] });
+  if (!existing.includes("saved_cards")) migrations.push({ sql: "ALTER TABLE users ADD COLUMN saved_cards TEXT",                   args: [] });
+  if (!existing.includes("deleted_at"))  migrations.push({ sql: "ALTER TABLE users ADD COLUMN deleted_at TEXT NULL DEFAULT NULL",  args: [] });
+  if (migrations.length > 0) await db.batch(migrations, "write");
+
+  // Note: email uniqueness is enforced in code (non-deleted rows only), so no
+  // UNIQUE index on email is needed — same logic as before, just no DROP INDEX
+  // step because SQLite never had one.
+
+  console.log("Turso (SQLite) tables ready");
 }
 
 initDB()
   .then(() => {
-    console.log("MySQL connected");
+    console.log("Turso connected");
     startPriceHistoryWorker();
   })
   .catch(err => {
-    console.error("MySQL error:", err.message);
-    console.error("Make sure MySQL is running and the database 'atlanticmetals' exists.");
-    console.error("Run in MySQL: CREATE DATABASE atlanticmetals;");
+    console.error("Turso error:", err.message);
+    console.error("Check TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.");
   });
 
 // Keep Render free tier awake
@@ -177,7 +198,7 @@ if (process.env.RENDER_EXTERNAL_URL) {
   }, 10 * 60 * 1000);
 }
 
-// ─── Auth Middleware ───────────────────────────────────────────────────────────
+// ─── Auth Middleware ──────────────────────────────────────────────────────────
 function authRequired(req, res, next) {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Not logged in" });
@@ -196,40 +217,38 @@ app.post("/auth/register", async (req, res) => {
     return res.status(400).json({ error: "All fields required" });
 
   try {
-    // Check if email is in use by a non-deleted account
-    const [rows] = await pool.execute(
-      "SELECT id FROM users WHERE email = ? AND deleted_at IS NULL",
-      [email]
-    );
-    if (rows.length > 0)
+    const { rows: active } = await db.execute({
+      sql:  "SELECT id FROM users WHERE email = ? AND deleted_at IS NULL",
+      args: [email]
+    });
+    if (active.length > 0)
       return res.status(400).json({ code: "EMAIL_EXISTS", error: "Email already registered" });
 
-    // If a deleted account exists with this email, reuse the row
-    const [deleted] = await pool.execute(
-      "SELECT id FROM users WHERE email = ? AND deleted_at IS NOT NULL",
-      [email]
-    );
+    const { rows: deleted } = await db.execute({
+      sql:  "SELECT id FROM users WHERE email = ? AND deleted_at IS NOT NULL",
+      args: [email]
+    });
 
     const hashed  = await bcrypt.hash(password, 8);
     const code    = crypto.randomInt(100000, 999999).toString();
-    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    // SQLite stores dates as ISO strings — use toISOString() instead of a Date object
+    const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19);
 
     if (deleted.length > 0) {
-      // Reactivate the old row — order history stays linked
-      await pool.execute(
-        `UPDATE users SET
-          first_name = ?, last_name = ?, password = ?,
-          verified = 0, verify_code = ?, verify_expires = ?,
-          phone = NULL, addresses = NULL, saved_cards = NULL,
-          deleted_at = NULL
-         WHERE id = ?`,
-        [firstName, lastName, hashed, code, expires, deleted[0].id]
-      );
+      await db.execute({
+        sql: `UPDATE users SET
+                first_name = ?, last_name = ?, password = ?,
+                verified = 0, verify_code = ?, verify_expires = ?,
+                phone = NULL, addresses = NULL, saved_cards = NULL,
+                deleted_at = NULL
+              WHERE id = ?`,
+        args: [firstName, lastName, hashed, code, expires, deleted[0].id]
+      });
     } else {
-      await pool.execute(
-        "INSERT INTO users (first_name, last_name, email, password, verify_code, verify_expires) VALUES (?, ?, ?, ?, ?, ?)",
-        [firstName, lastName, email, hashed, code, expires]
-      );
+      await db.execute({
+        sql:  "INSERT INTO users (first_name, last_name, email, password, verify_code, verify_expires) VALUES (?, ?, ?, ?, ?, ?)",
+        args: [firstName, lastName, email, hashed, code, expires]
+      });
     }
 
     await sendVerificationEmail(email, firstName, code);
@@ -240,25 +259,26 @@ app.post("/auth/register", async (req, res) => {
   }
 });
 
-// ─── Verify Email ──────────────────────────────────────────────────────────────
+// ─── Verify Email ─────────────────────────────────────────────────────────────
 app.post("/auth/verify-email", async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code)
     return res.status(400).json({ error: "Email and code required" });
 
   try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE email = ? AND verify_code = ? AND verify_expires > NOW() AND deleted_at IS NULL",
-      [email, code]
-    );
+    // datetime('now') replaces MySQL's NOW() for SQLite comparisons
+    const { rows } = await db.execute({
+      sql:  "SELECT * FROM users WHERE email = ? AND verify_code = ? AND verify_expires > datetime('now') AND deleted_at IS NULL",
+      args: [email, code]
+    });
     if (rows.length === 0)
       return res.status(400).json({ error: "Invalid or expired code. Request a new one." });
 
     const user = rows[0];
-    await pool.execute(
-      "UPDATE users SET verified = 1, verify_code = NULL, verify_expires = NULL WHERE id = ?",
-      [user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET verified = 1, verify_code = NULL, verify_expires = NULL WHERE id = ?",
+      args: [user.id]
+    });
 
     const name  = `${user.first_name} ${user.last_name}`;
     const token = jwt.sign({ id: user.id, name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
@@ -270,27 +290,27 @@ app.post("/auth/verify-email", async (req, res) => {
   }
 });
 
-// ─── Resend Verification ───────────────────────────────────────────────────────
+// ─── Resend Verification ──────────────────────────────────────────────────────
 app.post("/auth/resend-verification", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "Email required" });
 
   try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE email = ? AND verified = 0 AND deleted_at IS NULL",
-      [email]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT * FROM users WHERE email = ? AND verified = 0 AND deleted_at IS NULL",
+      args: [email]
+    });
     if (rows.length === 0)
       return res.status(400).json({ error: "Account not found or already verified" });
 
     const user    = rows[0];
     const code    = crypto.randomInt(100000, 999999).toString();
-    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19);
 
-    await pool.execute(
-      "UPDATE users SET verify_code = ?, verify_expires = ? WHERE id = ?",
-      [code, expires, user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET verify_code = ?, verify_expires = ? WHERE id = ?",
+      args: [code, expires, user.id]
+    });
 
     await sendVerificationEmail(email, user.first_name, code);
     res.json({ success: true });
@@ -300,17 +320,17 @@ app.post("/auth/resend-verification", async (req, res) => {
   }
 });
 
-// ─── Login ─────────────────────────────────────────────────────────────────────
+// ─── Login ────────────────────────────────────────────────────────────────────
 app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: "Email and password required" });
 
   try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE email = ? AND deleted_at IS NULL",
-      [email]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT * FROM users WHERE email = ? AND deleted_at IS NULL",
+      args: [email]
+    });
 
     if (rows.length === 0)
       return res.status(400).json({ code: "EMAIL_NOT_FOUND", error: "No account found with this email" });
@@ -333,7 +353,7 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// ─── Logout / Me ───────────────────────────────────────────────────────────────
+// ─── Logout / Me ──────────────────────────────────────────────────────────────
 app.post("/auth/logout", (req, res) => {
   res.clearCookie("token");
   res.json({ success: true });
@@ -343,13 +363,14 @@ app.get("/auth/me", authRequired, (req, res) => {
   res.json({ user: { name: req.user.name, email: req.user.email } });
 });
 
-// ─── Delete Account (soft delete) ─────────────────────────────────────────────
+// ─── Delete Account (soft delete) ────────────────────────────────────────────
 app.delete("/auth/account", authRequired, async (req, res) => {
   try {
-    await pool.execute(
-      "UPDATE users SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    // datetime('now') replaces MySQL's NOW()
+    await db.execute({
+      sql:  "UPDATE users SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     res.clearCookie("token");
     res.json({ success: true });
   } catch (err) {
@@ -358,18 +379,19 @@ app.delete("/auth/account", authRequired, async (req, res) => {
   }
 });
 
-// ─── Orders ────────────────────────────────────────────────────────────────────
+// ─── Orders ───────────────────────────────────────────────────────────────────
 app.post("/orders", authRequired, async (req, res) => {
   const { items, total } = req.body;
   if (!items || !items.length)
     return res.status(400).json({ error: "No items" });
 
   try {
-    const [result] = await pool.execute(
-      "INSERT INTO orders (user_id, items, total) VALUES (?, ?, ?)",
-      [req.user.id, JSON.stringify(items), total]
-    );
-    res.json({ success: true, orderId: result.insertId });
+    const result = await db.execute({
+      sql:  "INSERT INTO orders (user_id, items, total) VALUES (?, ?, ?)",
+      args: [req.user.id, JSON.stringify(items), total]
+    });
+    // LibSQL returns lastInsertRowid as BigInt — convert to Number for JSON
+    res.json({ success: true, orderId: Number(result.lastInsertRowid) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -378,10 +400,10 @@ app.post("/orders", authRequired, async (req, res) => {
 
 app.get("/orders", authRequired, async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC",
+      args: [req.user.id]
+    });
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -389,10 +411,13 @@ app.get("/orders", authRequired, async (req, res) => {
   }
 });
 
-// ─── Cart ──────────────────────────────────────────────────────────────────────
+// ─── Cart ─────────────────────────────────────────────────────────────────────
 app.get("/cart", authRequired, async (req, res) => {
   try {
-    const [rows] = await pool.execute("SELECT items FROM carts WHERE user_id = ?", [req.user.id]);
+    const { rows } = await db.execute({
+      sql:  "SELECT items FROM carts WHERE user_id = ?",
+      args: [req.user.id]
+    });
     const cart = rows.length > 0 ? parseJSON(rows[0].items) : [];
     res.json({ cart });
   } catch (err) {
@@ -405,10 +430,11 @@ app.put("/cart", authRequired, async (req, res) => {
   const { cart } = req.body;
   if (!Array.isArray(cart)) return res.status(400).json({ error: "Invalid cart" });
   try {
-    await pool.execute(
-      "INSERT INTO carts (user_id, items) VALUES (?, ?) ON DUPLICATE KEY UPDATE items = ?",
-      [req.user.id, JSON.stringify(cart), JSON.stringify(cart)]
-    );
+    // ON CONFLICT replaces MySQL's ON DUPLICATE KEY UPDATE
+    await db.execute({
+      sql:  "INSERT INTO carts (user_id, items) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET items = excluded.items, updated_at = datetime('now')",
+      args: [req.user.id, JSON.stringify(cart)]
+    });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -416,13 +442,13 @@ app.put("/cart", authRequired, async (req, res) => {
   }
 });
 
-// ─── Profile ───────────────────────────────────────────────────────────────────
+// ─── Profile ──────────────────────────────────────────────────────────────────
 app.get("/profile", authRequired, async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      "SELECT first_name, last_name, email, phone, addresses, saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT first_name, last_name, email, phone, addresses, saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     if (!rows.length) return res.status(404).json({ error: "User not found" });
     const u = rows[0];
     res.json({
@@ -445,17 +471,17 @@ app.put("/profile", authRequired, async (req, res) => {
     return res.status(400).json({ error: "First name, last name and email are required" });
 
   try {
-    const [existing] = await pool.execute(
-      "SELECT id FROM users WHERE email = ? AND id != ? AND deleted_at IS NULL",
-      [email, req.user.id]
-    );
+    const { rows: existing } = await db.execute({
+      sql:  "SELECT id FROM users WHERE email = ? AND id != ? AND deleted_at IS NULL",
+      args: [email, req.user.id]
+    });
     if (existing.length)
       return res.status(400).json({ error: "Email already in use by another account" });
 
-    await pool.execute(
-      "UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ? WHERE id = ?",
-      [firstName, lastName, email, phone || null, req.user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ? WHERE id = ?",
+      args: [firstName, lastName, email, phone || null, req.user.id]
+    });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -471,17 +497,20 @@ app.put("/profile/password", authRequired, async (req, res) => {
     return res.status(400).json({ error: "New password must be at least 6 characters" });
 
   try {
-    const [rows] = await pool.execute(
-      "SELECT password FROM users WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT password FROM users WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     if (!rows.length) return res.status(404).json({ error: "User not found" });
 
     const match = await bcrypt.compare(currentPassword, rows[0].password);
     if (!match) return res.status(400).json({ error: "Current password is incorrect" });
 
     const hashed = await bcrypt.hash(newPassword, 8);
-    await pool.execute("UPDATE users SET password = ? WHERE id = ?", [hashed, req.user.id]);
+    await db.execute({
+      sql:  "UPDATE users SET password = ? WHERE id = ?",
+      args: [hashed, req.user.id]
+    });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -492,20 +521,20 @@ app.put("/profile/password", authRequired, async (req, res) => {
 app.post("/profile/address", authRequired, async (req, res) => {
   const { addr, index } = req.body;
   try {
-    const [rows] = await pool.execute(
-      "SELECT addresses FROM users WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT addresses FROM users WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     let addresses = rows.length ? parseJSON(rows[0].addresses) : [];
     if (index !== null && index !== undefined && index >= 0) {
       addresses[index] = addr;
     } else {
       addresses.push(addr);
     }
-    await pool.execute(
-      "UPDATE users SET addresses = ? WHERE id = ?",
-      [JSON.stringify(addresses), req.user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET addresses = ? WHERE id = ?",
+      args: [JSON.stringify(addresses), req.user.id]
+    });
     res.json({ success: true, addresses });
   } catch (err) {
     console.error(err);
@@ -516,16 +545,16 @@ app.post("/profile/address", authRequired, async (req, res) => {
 app.delete("/profile/address/:index", authRequired, async (req, res) => {
   const i = parseInt(req.params.index);
   try {
-    const [rows] = await pool.execute(
-      "SELECT addresses FROM users WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT addresses FROM users WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     let addresses = rows.length ? parseJSON(rows[0].addresses) : [];
     addresses.splice(i, 1);
-    await pool.execute(
-      "UPDATE users SET addresses = ? WHERE id = ?",
-      [JSON.stringify(addresses), req.user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET addresses = ? WHERE id = ?",
+      args: [JSON.stringify(addresses), req.user.id]
+    });
     res.json({ success: true, addresses });
   } catch (err) {
     console.error(err);
@@ -536,16 +565,16 @@ app.delete("/profile/address/:index", authRequired, async (req, res) => {
 app.post("/profile/card", authRequired, async (req, res) => {
   const { card } = req.body;
   try {
-    const [rows] = await pool.execute(
-      "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     let saved_cards = rows.length ? parseJSON(rows[0].saved_cards) : [];
     saved_cards.push(card);
-    await pool.execute(
-      "UPDATE users SET saved_cards = ? WHERE id = ?",
-      [JSON.stringify(saved_cards), req.user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET saved_cards = ? WHERE id = ?",
+      args: [JSON.stringify(saved_cards), req.user.id]
+    });
     res.json({ success: true, saved_cards });
   } catch (err) {
     console.error(err);
@@ -556,16 +585,16 @@ app.post("/profile/card", authRequired, async (req, res) => {
 app.delete("/profile/card/:index", authRequired, async (req, res) => {
   const i = parseInt(req.params.index);
   try {
-    const [rows] = await pool.execute(
-      "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
-      [req.user.id]
-    );
+    const { rows } = await db.execute({
+      sql:  "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
+      args: [req.user.id]
+    });
     let saved_cards = rows.length ? parseJSON(rows[0].saved_cards) : [];
     saved_cards.splice(i, 1);
-    await pool.execute(
-      "UPDATE users SET saved_cards = ? WHERE id = ?",
-      [JSON.stringify(saved_cards), req.user.id]
-    );
+    await db.execute({
+      sql:  "UPDATE users SET saved_cards = ? WHERE id = ?",
+      args: [JSON.stringify(saved_cards), req.user.id]
+    });
     res.json({ success: true, saved_cards });
   } catch (err) {
     console.error(err);
@@ -573,7 +602,7 @@ app.delete("/profile/card/:index", authRequired, async (req, res) => {
   }
 });
 
-// ─── NY Close Helpers ──────────────────────────────────────────────────────────
+// ─── NY Close Helpers ─────────────────────────────────────────────────────────
 function isNYCloseWindow() {
   const now        = new Date();
   const estOffset  = -5 * 60;
@@ -597,7 +626,7 @@ function getLastCloseDate() {
   return d.toISOString().slice(0, 10);
 }
 
-// ─── Price History Worker ──────────────────────────────────────────────────────
+// ─── Price History Worker ─────────────────────────────────────────────────────
 async function recordPrices() {
   try {
     const metals  = ["XAU", "XAG", "XPT", "XPD"];
@@ -610,30 +639,36 @@ async function recordPrices() {
 
     const inCloseWindow = isNYCloseWindow();
     const closeDate     = getLastCloseDate();
-    const conn          = await pool.getConnection();
 
-    try {
-      for (const [metal, price] of Object.entries(results)) {
-        if (price == null) continue;
-        await conn.execute(
-          "INSERT INTO price_history (metal_type, price) VALUES (?, ?)",
-          [metal, price]
-        );
-        if (inCloseWindow) {
-          await conn.execute(
-            `INSERT INTO ny_close (metal_type, price, close_date)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-            [metal, price, closeDate]
-          );
-        }
+    // Build batch of write statements — replaces pool.getConnection() pattern
+    const statements = [];
+
+    for (const [metal, price] of Object.entries(results)) {
+      if (price == null) continue;
+
+      statements.push({
+        sql:  "INSERT INTO price_history (metal_type, price) VALUES (?, ?)",
+        args: [metal, price]
+      });
+
+      if (inCloseWindow) {
+        // ON CONFLICT replaces MySQL's ON DUPLICATE KEY UPDATE
+        statements.push({
+          sql:  `INSERT INTO ny_close (metal_type, price, close_date)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(metal_type, close_date) DO UPDATE SET price = excluded.price`,
+          args: [metal, price, closeDate]
+        });
       }
-      await conn.execute(
-        "DELETE FROM price_history WHERE timestamp < DATE_SUB(NOW(), INTERVAL 24 HOUR)"
-      );
-    } finally {
-      conn.release();
     }
+
+    // datetime('now', '-24 hours') replaces MySQL's DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    statements.push({
+      sql:  "DELETE FROM price_history WHERE timestamp < datetime('now', '-24 hours')",
+      args: []
+    });
+
+    await db.batch(statements, "write");
 
     cache.data      = results;
     cache.timestamp = Date.now();
@@ -649,7 +684,7 @@ function startPriceHistoryWorker() {
   console.log("Price history worker started (runs every 5 minutes)");
 }
 
-// ─── Prices ────────────────────────────────────────────────────────────────────
+// ─── Prices ───────────────────────────────────────────────────────────────────
 let cache = { data: null, timestamp: 0 };
 
 app.get("/prices", async (req, res) => {
@@ -667,12 +702,13 @@ app.get("/prices", async (req, res) => {
       cache.timestamp = now;
     }
 
-    const [historyRows] = await pool.execute(`
-      SELECT metal_type, price, timestamp
-      FROM price_history
-      WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-      ORDER BY timestamp ASC
-    `);
+    const { rows: historyRows } = await db.execute({
+      sql:  `SELECT metal_type, price, timestamp
+             FROM price_history
+             WHERE timestamp >= datetime('now', '-24 hours')
+             ORDER BY timestamp ASC`,
+      args: []
+    });
 
     const history = { XAU: [], XAG: [], XPT: [], XPD: [] };
     for (const row of historyRows) {
@@ -683,11 +719,11 @@ app.get("/prices", async (req, res) => {
       if (history[metal].length > 30) history[metal] = history[metal].slice(-30);
     }
 
-    const closeDate  = getLastCloseDate();
-    const [closeRows] = await pool.execute(
-      "SELECT metal_type, price FROM ny_close WHERE close_date = ?",
-      [closeDate]
-    );
+    const closeDate = getLastCloseDate();
+    const { rows: closeRows } = await db.execute({
+      sql:  "SELECT metal_type, price FROM ny_close WHERE close_date = ?",
+      args: [closeDate]
+    });
     const nyClose = { XAU: null, XAG: null, XPT: null, XPD: null };
     for (const row of closeRows) {
       nyClose[row.metal_type] = parseFloat(row.price);
@@ -706,5 +742,8 @@ app.get("/prices", async (req, res) => {
     });
   }
 });
+
+// Pass the Turso db client to the coins router (instead of the old mysql2 pool)
+app.use("/api/coins", coinsRouter(db));
 
 app.listen(3000, () => console.log("Server running on http://localhost:3000"));
