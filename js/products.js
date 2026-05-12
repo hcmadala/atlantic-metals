@@ -46,7 +46,7 @@ function render(){
         </div>
         <a href="product.html?id=${p.id}" class="card-link">
             <div class="product-img-wrap">
-                <img src="${p.image}" alt="${p.name}">
+                <img src="${p.image}" alt="${p.name}" ${p.srcset ? `srcset="${p.srcset}" sizes="(max-width: 700px) 90vw, 280px"` : ""}>
             </div>
             <h3>${p.name}</h3>
         </a>
@@ -301,11 +301,15 @@ if(breadcrumb){
 }
 
 /* CART */
+function getMaxQty(product) {
+    if (!product) return Infinity;
+    if (product.qoh !== undefined) return Math.max(0, Number(product.qoh || 0));
+    return Infinity;
+}
+
 function changeQty(btn, delta){
     const qtyEl = btn.parentElement.querySelector(".qty-value");
     let qty = parseInt(qtyEl.innerText);
-    qty = Math.max(1, qty + delta);
-    qtyEl.innerText = qty;
 
     // Update active tier highlight
     const card = btn.closest(".product-card");
@@ -315,6 +319,9 @@ function changeQty(btn, delta){
     const pid = parseInt(idMatch[0]);
     const prod = products.find(pr => pr.id === pid);
     if(!prod) return;
+    const maxQty = getMaxQty(prod);
+    qty = Math.max(1, Math.min(maxQty || 1, qty + delta));
+    qtyEl.innerText = qty;
 
     const tiers = typeof getPricingTiers==="function" ? getPricingTiers(prod.metal, prod.type) : [];
     const rows = card.querySelectorAll(".pricing-table tbody tr");
@@ -331,9 +338,21 @@ function changeQty(btn, delta){
 }
 
 function addToCart(id, btn){
-    const qty=parseInt(btn.parentElement.querySelector(".qty-value").innerText);
+    const product = products.find(p => p.id === id);
+    const maxQty = getMaxQty(product);
+    if (maxQty <= 0) return;
+
+    const requestedQty=parseInt(btn.parentElement.querySelector(".qty-value").innerText);
     const cart=JSON.parse(localStorage.getItem("cart")||"[]");
     const existing=cart.find(i=>i.id===id);
+    const currentQty = existing ? existing.qty : 0;
+    const qty = Math.min(requestedQty, Math.max(0, maxQty - currentQty));
+    if (qty <= 0) {
+        btn.innerText = `Max ${maxQty} in stock`;
+        setTimeout(()=>btn.innerText="Add to Cart",1500);
+        return;
+    }
+
     if(existing){
         existing.qty+=qty;
     }else{
@@ -371,15 +390,23 @@ if(metal){
 }
 
 /* INIT */
-applyInitialFilter();
-buildWeightFilters();
-restoreFilters();
+async function initProductsPage() {
+    if (typeof hydrateProductImages === "function") {
+        await hydrateProductImages(products);
+    }
 
-if(currentSort){
-    sortToggle.innerHTML=sortLabels[currentSort]+' <span id="sortArrow">∨</span>';
+    applyInitialFilter();
+    buildWeightFilters();
+    restoreFilters();
+
+    if(currentSort){
+        sortToggle.innerHTML=sortLabels[currentSort]+' <span id="sortArrow">∨</span>';
+    }
+
+    applySort();
+    buildDropdown();
+    render();
+    updateCartCount();
 }
 
-applySort();
-buildDropdown();
-render();
-updateCartCount();
+initProductsPage();

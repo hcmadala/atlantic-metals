@@ -1,5 +1,4 @@
 require("dotenv").config();
-console.log("URL:", process.env.TURSO_DATABASE_URL); 
 const express          = require("express");
 const bcrypt           = require("bcryptjs");
 const jwt              = require("jsonwebtoken");
@@ -7,6 +6,8 @@ const cookieParser     = require("cookie-parser");
 const { createClient } = require("@libsql/client");
 const crypto           = require("crypto");
 const nodemailer       = require("nodemailer");
+const fs               = require("fs");
+const vm               = require("vm");
 const coinsRouter      = require("./routes/coins");
 
 const app = express();
@@ -14,7 +15,16 @@ app.use(express.static(__dirname));
 app.use(express.json());
 app.use(cookieParser());
 
-const JWT_SECRET = "atlanticmetals_secret_2026";
+const JWT_SECRET  = process.env.JWT_SECRET;
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map(email => email.trim().toLowerCase())
+  .filter(Boolean);
+
+if (!JWT_SECRET) {
+  console.error("Missing JWT_SECRET environment variable.");
+  process.exit(1);
+}
 
 // ─── Turso / LibSQL Client ────────────────────────────────────────────────────
 const db = createClient({
@@ -23,20 +33,40 @@ const db = createClient({
 });
 
 // ─── Email Transporter ────────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER || "haradeepchowdarymadala@gmail.com",
-    pass: process.env.EMAIL_PASS || "vijo hnyd jaju fwiv"
-  }
-});
+const hasEmailConfig = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+const transporter = hasEmailConfig
+  ? nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    })
+  : null;
 
-transporter.verify((error) => {
-  if (error) console.error("Email transporter error:", error.message);
-  else        console.log("Email transporter ready");
-});
+if (transporter) {
+  transporter.verify((error) => {
+    if (error) console.error("Email transporter error:", error.message);
+    else        console.log("Email transporter ready");
+  });
+} else {
+  console.warn("Email transporter disabled. Set EMAIL_USER and EMAIL_PASS to send verification codes.");
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 async function sendVerificationEmail(email, firstName, code) {
+  if (!transporter) {
+    throw new Error("Email transporter is not configured");
+  }
+
   try {
     await transporter.sendMail({
       from: '"Atlantic Metals" <no-reply@atlanticmetals.ca>',
@@ -45,7 +75,7 @@ async function sendVerificationEmail(email, firstName, code) {
       html: `
         <div style="font-family:monospace;background:#111;color:#fff;padding:32px;border-radius:12px;max-width:480px">
           <h2 style="color:#c9a84c;margin-top:0">Atlantic Metals</h2>
-          <p>Hi ${firstName},</p>
+          <p>Hi ${escapeHTML(firstName)},</p>
           <p>Your verification code is:</p>
           <div style="background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:20px;text-align:center;font-size:32px;letter-spacing:10px;color:#c9a84c;font-weight:bold;margin:20px 0">
             ${code}
@@ -60,6 +90,10 @@ async function sendVerificationEmail(email, firstName, code) {
   }
 }
 
+function isAdminEmail(email) {
+  return ADMIN_EMAILS.includes(String(email || "").toLowerCase());
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function parseJSON(v, fallback = []) {
   if (!v) return fallback;
@@ -67,6 +101,112 @@ function parseJSON(v, fallback = []) {
     try { return JSON.parse(v); } catch { return fallback; }
   }
   return v;
+}
+
+function loadProducts() {
+  const source = fs.readFileSync(`${__dirname}/js/data.js`, "utf8");
+  const context = {};
+  vm.createContext(context);
+  const loadedProducts = vm.runInContext(`${source}; products;`, context);
+  return Array.isArray(loadedProducts) ? loadedProducts : [];
+}
+
+const products = loadProducts();
+const productsById = new Map(products.map(product => [Number(product.id), product]));
+const productsBySku = new Map(products.map(product => [String(product.sku || ""), product]).filter(([sku]) => sku));
+
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\b(19|20)\d{2}\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+const MARGINS = {
+  gold:      { coins: 0.04, rounds: 0.03, bars: 0.025 },
+  silver:    { coins: 0.12, rounds: 0.11, bars: 0.10  },
+  platinum:  { coins: 0.06, rounds: 0.05, bars: 0.04  },
+  palladium: { coins: 0.06, rounds: 0.05, bars: 0.04  }
+};
+
+const BULK_TIERS = {
+  gold: [
+    { min: 1,   max: 9,        discount: 0 },
+    { min: 10,  max: 19,       discount: 50 },
+    { min: 20,  max: 49,       discount: 75 },
+    { min: 50,  max: 99,       discount: 100 },
+    { min: 100, max: Infinity, discount: 125 }
+  ],
+  silver: [
+    { min: 1,    max: 24,       discount: 0 },
+    { min: 25,   max: 99,       discount: 0.5 },
+    { min: 100,  max: 499,      discount: 1 },
+    { min: 500,  max: 1499,     discount: 1.5 },
+    { min: 1500, max: Infinity, discount: 2 }
+  ],
+  platinum: [
+    { min: 1,   max: 9,        discount: 0 },
+    { min: 10,  max: 24,       discount: 25 },
+    { min: 25,  max: 49,       discount: 37 },
+    { min: 50,  max: 99,       discount: 50 },
+    { min: 100, max: Infinity, discount: 65 }
+  ],
+  palladium: [
+    { min: 1,   max: 9,        discount: 0 },
+    { min: 10,  max: 24,       discount: 0.5 },
+    { min: 25,  max: 49,       discount: 1 },
+    { min: 50,  max: 99,       discount: 1.5 },
+    { min: 100, max: Infinity, discount: 2 }
+  ]
+};
+
+function getSpotPrice(metal) {
+  const codeMap = { gold: "XAU", silver: "XAG", platinum: "XPT", palladium: "XPD" };
+  const fallback = { gold: 4700, silver: 73, platinum: 2000, palladium: 1530 };
+  return cache.data?.[codeMap[metal]] || fallback[metal] || 0;
+}
+
+function calcWirePrice(metal, type, quantity) {
+  const spot = getSpotPrice(metal);
+  const margin = MARGINS[metal]?.[type] ?? 0.05;
+  const tiers = BULK_TIERS[metal] || BULK_TIERS.gold;
+  const tier = tiers.find(t => quantity >= t.min && quantity <= t.max) || tiers[0];
+  return Math.max(0, spot + (spot * margin) - tier.discount);
+}
+
+async function buildOrderItems(rawItems) {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return null;
+
+  const { rows: coinRows } = await db.execute({
+    sql: "SELECT id, sku, name, qoh FROM coins",
+    args: []
+  });
+  const coinsByName = new Map(coinRows.map(coin => [normalizeName(coin.name), coin]));
+  const coinsBySku = new Map(coinRows.filter(coin => coin.sku).map(coin => [coin.sku, coin]));
+
+  return rawItems.map(item => {
+    const productId = Number(item.productId ?? item.id);
+    const product = productsById.get(productId);
+    const qty = Math.max(1, Math.min(9999, parseInt(item.qty, 10) || 0));
+
+    if (!product || qty < 1) return null;
+
+    const coin = coinsBySku.get(product.sku) || coinsByName.get(normalizeName(product.name));
+    if (!coin || Number(coin.qoh || 0) < qty) return null;
+
+    const price = calcWirePrice(product.metal, product.type, qty);
+    return {
+      productId: product.id,
+      coinId: coin?.id || null,
+      name: product.name,
+      metal: product.metal,
+      type: product.type,
+      qty,
+      price
+    };
+  }).filter(Boolean);
 }
 
 // ─── Create / Migrate Tables ─────────────────────────────────────────────────
@@ -148,14 +288,18 @@ async function initDB() {
     {
       sql: `CREATE TABLE IF NOT EXISTS coins (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        sku        TEXT UNIQUE,
         name       TEXT NOT NULL,
         slug       TEXT UNIQUE NOT NULL,
         metal      TEXT NOT NULL,
+        product_type TEXT NOT NULL DEFAULT 'coins',
         mint       TEXT,
         weight_oz  REAL,
         purity     TEXT,
         year       INTEGER,
+        qoh        INTEGER NOT NULL DEFAULT 0,
         image_key  TEXT,
+        image_key_2 TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       )`,
       args: []
@@ -164,15 +308,32 @@ async function initDB() {
 
   // ─── Migrations (for any existing Turso installs missing columns) ──────────
   // SQLite uses PRAGMA table_info instead of information_schema
-  const { rows: colRows } = await db.execute({ sql: "PRAGMA table_info(users)", args: [] });
-  const existing = colRows.map(r => r.name);
+  const { rows: userColRows } = await db.execute({ sql: "PRAGMA table_info(users)", args: [] });
+  const existingUserColumns = userColRows.map(r => r.name);
 
   const migrations = [];
-  if (!existing.includes("phone"))       migrations.push({ sql: "ALTER TABLE users ADD COLUMN phone TEXT",                         args: [] });
-  if (!existing.includes("addresses"))   migrations.push({ sql: "ALTER TABLE users ADD COLUMN addresses TEXT",                     args: [] });
-  if (!existing.includes("saved_cards")) migrations.push({ sql: "ALTER TABLE users ADD COLUMN saved_cards TEXT",                   args: [] });
-  if (!existing.includes("deleted_at"))  migrations.push({ sql: "ALTER TABLE users ADD COLUMN deleted_at TEXT NULL DEFAULT NULL",  args: [] });
+  if (!existingUserColumns.includes("phone"))       migrations.push({ sql: "ALTER TABLE users ADD COLUMN phone TEXT",                         args: [] });
+  if (!existingUserColumns.includes("addresses"))   migrations.push({ sql: "ALTER TABLE users ADD COLUMN addresses TEXT",                     args: [] });
+  if (!existingUserColumns.includes("saved_cards")) migrations.push({ sql: "ALTER TABLE users ADD COLUMN saved_cards TEXT",                   args: [] });
+  if (!existingUserColumns.includes("deleted_at"))  migrations.push({ sql: "ALTER TABLE users ADD COLUMN deleted_at TEXT NULL DEFAULT NULL",  args: [] });
+
+  const { rows: coinColRows } = await db.execute({ sql: "PRAGMA table_info(coins)", args: [] });
+  const existingCoinColumns = coinColRows.map(r => r.name);
+  if (!existingCoinColumns.includes("image_key_2")) migrations.push({ sql: "ALTER TABLE coins ADD COLUMN image_key_2 TEXT", args: [] });
+  if (!existingCoinColumns.includes("qoh"))         migrations.push({ sql: "ALTER TABLE coins ADD COLUMN qoh INTEGER NOT NULL DEFAULT 0", args: [] });
+  if (!existingCoinColumns.includes("sku"))         migrations.push({ sql: "ALTER TABLE coins ADD COLUMN sku TEXT", args: [] });
+  if (!existingCoinColumns.includes("product_type")) migrations.push({ sql: "ALTER TABLE coins ADD COLUMN product_type TEXT NOT NULL DEFAULT 'coins'", args: [] });
+
   if (migrations.length > 0) await db.batch(migrations, "write");
+
+  for (const product of products) {
+    await db.execute({
+      sql: `UPDATE coins
+            SET sku = COALESCE(sku, ?), product_type = COALESCE(NULLIF(product_type, ''), ?)
+            WHERE lower(name) = lower(?)`,
+      args: [product.sku, product.type, product.name]
+    });
+  }
 
   // Note: email uniqueness is enforced in code (non-deleted rows only), so no
   // UNIQUE index on email is needed — same logic as before, just no DROP INDEX
@@ -210,11 +371,32 @@ function authRequired(req, res, next) {
   }
 }
 
+function adminRequired(req, res, next) {
+  if (!req.user) {
+    return authRequired(req, res, () => adminRequired(req, res, next));
+  }
+  if (!isAdminEmail(req.user?.email)) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+function setAuthCookie(res, token) {
+  res.cookie("token", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  });
+}
+
 // ─── Register ─────────────────────────────────────────────────────────────────
 app.post("/auth/register", async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
   if (!firstName || !lastName || !email || !password)
     return res.status(400).json({ error: "All fields required" });
+  if (!transporter)
+    return res.status(503).json({ error: "Email verification is not configured" });
 
   try {
     const { rows: active } = await db.execute({
@@ -282,8 +464,8 @@ app.post("/auth/verify-email", async (req, res) => {
 
     const name  = `${user.first_name} ${user.last_name}`;
     const token = jwt.sign({ id: user.id, name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-    res.cookie("token", token, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ success: true, user: { name, email: user.email } });
+    setAuthCookie(res, token);
+    res.json({ success: true, user: { name, email: user.email, isAdmin: isAdminEmail(user.email) } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -294,6 +476,8 @@ app.post("/auth/verify-email", async (req, res) => {
 app.post("/auth/resend-verification", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "Email required" });
+  if (!transporter)
+    return res.status(503).json({ error: "Email verification is not configured" });
 
   try {
     const { rows } = await db.execute({
@@ -345,8 +529,8 @@ app.post("/auth/login", async (req, res) => {
 
     const name  = `${user.first_name} ${user.last_name}`;
     const token = jwt.sign({ id: user.id, name, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-    res.cookie("token", token, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ success: true, user: { name, email: user.email } });
+    setAuthCookie(res, token);
+    res.json({ success: true, user: { name, email: user.email, isAdmin: isAdminEmail(user.email) } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -360,7 +544,7 @@ app.post("/auth/logout", (req, res) => {
 });
 
 app.get("/auth/me", authRequired, (req, res) => {
-  res.json({ user: { name: req.user.name, email: req.user.email } });
+  res.json({ user: { name: req.user.name, email: req.user.email, isAdmin: isAdminEmail(req.user.email) } });
 });
 
 // ─── Delete Account (soft delete) ────────────────────────────────────────────
@@ -381,15 +565,24 @@ app.delete("/auth/account", authRequired, async (req, res) => {
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
 app.post("/orders", authRequired, async (req, res) => {
-  const { items, total } = req.body;
-  if (!items || !items.length)
-    return res.status(400).json({ error: "No items" });
-
   try {
+    const items = await buildOrderItems(req.body.items);
+    if (!items || !items.length) return res.status(400).json({ error: "No valid items or insufficient stock" });
+
+    const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
     const result = await db.execute({
       sql:  "INSERT INTO orders (user_id, items, total) VALUES (?, ?, ?)",
       args: [req.user.id, JSON.stringify(items), total]
     });
+
+    const stockUpdates = items
+      .filter(item => item.coinId)
+      .map(item => ({
+        sql: "UPDATE coins SET qoh = qoh - ? WHERE id = ? AND qoh >= ?",
+        args: [item.qty, item.coinId, item.qty]
+      }));
+    if (stockUpdates.length) await db.batch(stockUpdates, "write");
+
     // LibSQL returns lastInsertRowid as BigInt — convert to Number for JSON
     res.json({ success: true, orderId: Number(result.lastInsertRowid) });
   } catch (err) {
@@ -564,13 +757,29 @@ app.delete("/profile/address/:index", authRequired, async (req, res) => {
 
 app.post("/profile/card", authRequired, async (req, res) => {
   const { card } = req.body;
+  if (
+    !card ||
+    typeof card !== "object" ||
+    !/^\d{4}$/.test(String(card.last4 || "")) ||
+    !/^\d{2}\/\d{2}$/.test(String(card.expiry || ""))
+  ) {
+    return res.status(400).json({ error: "Only card brand, last 4 digits, expiry, and name can be saved" });
+  }
+
+  const safeCard = {
+    brand:  String(card.brand || "").slice(0, 40),
+    last4:  String(card.last4),
+    expiry: String(card.expiry),
+    name:   String(card.name || "").slice(0, 80)
+  };
+
   try {
     const { rows } = await db.execute({
       sql:  "SELECT saved_cards FROM users WHERE id = ? AND deleted_at IS NULL",
       args: [req.user.id]
     });
     let saved_cards = rows.length ? parseJSON(rows[0].saved_cards) : [];
-    saved_cards.push(card);
+    saved_cards.push(safeCard);
     await db.execute({
       sql:  "UPDATE users SET saved_cards = ? WHERE id = ?",
       args: [JSON.stringify(saved_cards), req.user.id]
@@ -744,6 +953,6 @@ app.get("/prices", async (req, res) => {
 });
 
 // Pass the Turso db client to the coins router (instead of the old mysql2 pool)
-app.use("/api/coins", coinsRouter(db));
+app.use("/api/coins", coinsRouter(db, { adminRequired }));
 
 app.listen(3000, () => console.log("Server running on http://localhost:3000"));

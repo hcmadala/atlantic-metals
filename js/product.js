@@ -7,13 +7,22 @@ let images = [];
 let thumbOffset = 0;
 const THUMB_STEP = 110; // thumb height (100) + gap (10)
 
-if (!p) {
-    document.getElementById("productName").innerText = "Product not found";
-} else {
+async function initProductPage() {
+    if (typeof hydrateProductImages === "function") {
+        await hydrateProductImages(products);
+    }
+
+    if (!p) {
+        document.getElementById("productName").innerText = "Product not found";
+        updateCartCount();
+        return;
+    }
+
     document.title = p.name + " – Atlantic Metals";
 
     // ── IMAGES ──────────────────────────────────────────────────────────
-    if (p.image)  images.push(p.image);
+    if (p.imageDetail) images.push(p.imageDetail);
+    else if (p.image)  images.push(p.image);
     if (p.image2) images.push(p.image2);
 
     const thumbsTrack = document.getElementById("thumbsTrack");
@@ -26,7 +35,12 @@ if (!p) {
         thumbsTrack.appendChild(el);
     });
 
-    document.getElementById("mainImage").src = images[0] || "";
+    const mainImage = document.getElementById("mainImage");
+    mainImage.src = images[0] || "";
+    if (p.srcset) {
+        mainImage.srcset = p.srcset;
+        mainImage.sizes = "(max-width: 900px) 90vw, 620px";
+    }
 
     // ── TEXT ─────────────────────────────────────────────────────────────
     document.getElementById("productName").innerText = p.name;
@@ -66,6 +80,7 @@ if (!p) {
 
     buildPricingTable();
     updateDetailPrice();
+    updateCartCount();
 }
 
 // ── PRICE — uses live spot via calcWirePrice ──────────────────────────────
@@ -116,6 +131,7 @@ function selectImage(index) {
     mainImg.style.opacity = "0";
     setTimeout(() => {
         mainImg.src           = images[index];
+        mainImg.srcset        = index === 0 && p.srcset ? p.srcset : "";
         mainImg.style.opacity = "1";
     }, 100);
     document.querySelectorAll(".thumb-img").forEach((img, i) => {
@@ -132,10 +148,17 @@ function scrollThumbs(direction) {
 }
 
 // ── QTY CHANGE ────────────────────────────────────────────────────────────
+function getDetailMaxQty() {
+    if (!p) return Infinity;
+    if (p.qoh === undefined) return Infinity;
+    return Math.max(0, Number(p.qoh || 0));
+}
+
 function changeDetailQty(delta) {
     const el = document.getElementById("detailQty");
     let qty  = parseInt(el.innerText);
-    qty      = Math.max(1, qty + delta);
+    const maxQty = getDetailMaxQty();
+    qty      = Math.max(1, Math.min(maxQty || 1, qty + delta));
     el.innerText = qty;
     updateDetailPrice();
     buildPricingTable();
@@ -145,9 +168,21 @@ function changeDetailQty(delta) {
 async function addToCartDetail() {
     if (!p.available) return;
 
-    const qty      = parseInt(document.getElementById("detailQty").innerText);
+    const maxQty   = getDetailMaxQty();
+    if (maxQty <= 0) return;
+
+    const requestedQty = parseInt(document.getElementById("detailQty").innerText);
     const cart     = JSON.parse(localStorage.getItem("cart") || "[]");
     const existing = cart.find(i => i.id === id);
+    const currentQty = existing ? existing.qty : 0;
+    const qty = Math.min(requestedQty, Math.max(0, maxQty - currentQty));
+
+    if (qty <= 0) {
+        const btn = document.getElementById("detailCartBtn");
+        btn.innerText = `Max ${maxQty} in stock`;
+        setTimeout(() => btn.innerText = "Add to Cart", 1500);
+        return;
+    }
 
     if (existing) {
         existing.qty += qty;
@@ -172,4 +207,4 @@ function updateCartCount() {
     if (el) el.innerText = total;
 }
 
-updateCartCount();
+initProductPage();

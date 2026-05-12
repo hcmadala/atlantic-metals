@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin — Atlantic Metals</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #1a1a1a;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .admin-header {
+      background: #111214;
+      border-bottom: 1px solid #2D3135;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .admin-header .brand { color: #c9a84c; font-size: 18px; font-weight: 700; text-decoration: none; }
+    .admin-header .badge {
+      background: #c9a84c22;
+      color: #c9a84c;
+      border: 1px solid #c9a84c44;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+    }
+
+    /* ── Layout ── */
+    .admin-body {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px;
+    }
+
+    /* ── Auth Gate ── */
+    #authGate {
+      max-width: 400px;
+      margin: 80px auto;
+      background: #111214;
+      border: 1px solid #2D3135;
+      border-radius: 12px;
+      padding: 40px;
+    }
+    #authGate h2 { color: #c9a84c; margin-bottom: 24px; font-size: 20px; }
+    #authGate p  { color: #94A3B8; font-size: 13px; margin-bottom: 24px; }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #2D3135;
+    }
+    .section-title span { color: #c9a84c; }
+
+    /* ── Cards ── */
+    .panel {
+      background: #111214;
+      border: 1px solid #2D3135;
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 40px;
+    }
+
+    /* ── Form ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .form-grid .full { grid-column: 1 / -1; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #94A3B8;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    input, select {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #2D3135;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: #c9a84c; }
+    select option { background: #1a1a1a; }
+
+    .btn {
+      padding: 11px 24px;
+      border-radius: 8px;
+      border: none;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-gold   { background: #c9a84c; color: #000; }
+    .btn-gold:hover { background: #b8973f; }
+    .btn-outline { background: transparent; color: #c9a84c; border: 1px solid #c9a84c44; }
+    .btn-outline:hover { background: #c9a84c11; }
+    .btn-danger { background: transparent; color: #F87171; border: 1px solid #F8717133; font-size: 12px; padding: 6px 14px; }
+    .btn-danger:hover { background: #F8717111; }
+
+    .form-actions { margin-top: 20px; display: flex; gap: 12px; align-items: center; }
+    .admin-toolbar {
+      display: grid;
+      grid-template-columns: 1fr 160px 160px;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .edit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    /* ── Coins grid ── */
+    .coins-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .coin-card {
+      background: #1a1a1a;
+      border: 1px solid #2D3135;
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .coin-card:hover { border-color: #c9a84c44; transform: translateY(-2px); }
+
+    .coin-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      background: #111214;
+    }
+    .coin-img-slot {
+      aspect-ratio: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .coin-img-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 0.3s;
+    }
+    .coin-img-slot .img-overlay {
+      position: absolute;
+      inset: 0;
+      background: #00000088;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-size: 11px;
+      color: #c9a84c;
+      gap: 4px;
+    }
+    .coin-img-slot:hover .img-overlay { opacity: 1; }
+    .coin-img-slot .img-overlay .upload-icon { font-size: 22px; }
+    .coin-img-slot .img-label {
+      position: absolute;
+      bottom: 6px;
+      left: 8px;
+      font-size: 10px;
+      color: #94A3B8;
+      background: #00000088;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .coin-img-slot input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      border: none;
+    }
+
+    .coin-info { padding: 16px; }
+    .coin-info .coin-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .coin-info .coin-meta { font-size: 12px; color: #94A3B8; margin-bottom: 12px; }
+    .coin-info .coin-id   { font-size: 11px; color: #2D3135; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #111214;
+      border: 1px solid #2D3135;
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 999;
+      min-width: 240px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.success { border-color: #4ADE8044; }
+    #toast.error   { border-color: #F8717144; }
+    #toast .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    #toast.success .dot { background: #4ADE80; }
+    #toast.error   .dot { background: #F87171; }
+
+    /* ── Upload progress ── */
+    .uploading { opacity: 0.6; pointer-events: none; }
+    .upload-spinner { animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #94A3B8;
+      font-size: 14px;
+    }
+    .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-pill {
+      background: #111214;
+      border: 1px solid #2D3135;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 13px;
+    }
+    .stat-pill .num { font-size: 22px; font-weight: 700; color: #c9a84c; display: block; }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .coins-grid { grid-template-columns: 1fr; }
+      .stats-bar { flex-wrap: wrap; }
+      .admin-body { padding: 20px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="admin-header">
+  <a href="index.html" class="brand">Atlantic Metals</a>
+  <span class="badge">Admin Panel</span>
+</div>
+
+<!-- AUTH GATE -->
+<div id="authGate" style="display:none">
+  <h2>Admin Access</h2>
+  <p>You must be logged in as an admin to access this page.</p>
+  <a href="login.html" class="btn btn-gold" style="display:inline-block;text-decoration:none">Go to Login →</a>
+</div>
+
+<!-- MAIN ADMIN CONTENT -->
+<div class="admin-body" id="adminContent" style="display:none">
+
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-pill"><span class="num" id="statTotal">—</span>Total Coins</div>
+    <div class="stat-pill"><span class="num" id="statWithImages">—</span>With Images</div>
+    <div class="stat-pill"><span class="num" id="statNoImages">—</span>Missing Images</div>
+  </div>
+
+  <!-- Add Coin Form -->
+  <div class="panel">
+    <div class="section-title">Add <span>Inventory Item</span></div>
+    <div class="form-grid">
+      <div>
+        <label>SKU *</label>
+        <input type="text" id="fSku" placeholder="gold-eagle-1oz">
+      </div>
+      <div>
+        <label>Name *</label>
+        <input type="text" id="fName" placeholder="1 oz Canadian Gold Maple Leaf">
+      </div>
+      <div>
+        <label>Metal *</label>
+        <select id="fMetal">
+          <option value="">Select metal</option>
+          <option value="gold">Gold</option>
+          <option value="silver">Silver</option>
+          <option value="platinum">Platinum</option>
+          <option value="palladium">Palladium</option>
+        </select>
+      </div>
+      <div>
+        <label>Type *</label>
+        <select id="fType">
+          <option value="coins">Coins</option>
+          <option value="bars">Bars</option>
+          <option value="rounds">Rounds</option>
+        </select>
+      </div>
+      <div>
+        <label>Mint</label>
+        <input type="text" id="fMint" placeholder="Royal Canadian Mint">
+      </div>
+      <div>
+        <label>Weight (oz)</label>
+        <input type="number" id="fWeight" placeholder="1.0" step="0.001">
+      </div>
+      <div>
+        <label>Purity</label>
+        <input type="text" id="fPurity" placeholder=".9999">
+      </div>
+      <div>
+        <label>Year</label>
+        <input type="number" id="fYear" placeholder="2025">
+      </div>
+      <div>
+        <label>QOH</label>
+        <input type="number" id="fQoh" placeholder="0" min="0" step="1" value="0">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-gold" onclick="addCoin()">+ Add Item</button>
+      <span id="addStatus" style="font-size:13px;color:#94A3B8"></span>
+    </div>
+  </div>
+
+  <!-- Coins List -->
+  <div class="section-title">All <span>Inventory</span></div>
+  <div class="admin-toolbar">
+    <input type="text" id="inventorySearch" placeholder="Search name, SKU, mint">
+    <select id="inventoryTypeFilter">
+      <option value="">All types</option>
+      <option value="coins">Coins</option>
+      <option value="bars">Bars</option>
+      <option value="rounds">Rounds</option>
+    </select>
+    <select id="inventoryStockFilter">
+      <option value="">All stock</option>
+      <option value="in">In stock</option>
+      <option value="out">Out of stock</option>
+      <option value="missing-image">Missing image</option>
+    </select>
+  </div>
+  <div class="coins-grid" id="coinsGrid">
+    <div class="empty-state">
+      <div class="empty-icon">⏳</div>
+      Loading coins...
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
+
+<script>
+  const API = "";  // same origin
+  const coinNames = new Map();
+  let allInventory = [];
+
+  function escapeHTML(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function escapeAttr(value) {
+    return escapeHTML(value);
+  }
+
+  // ── Auth check ──
+  async function checkAuth() {
+    try {
+      const res = await fetch(`${API}/auth/me`, { credentials: "include" });
+      const data = await res.json();
+      if (res.ok && data.user?.isAdmin) {
+        document.getElementById("adminContent").style.display = "block";
+        loadCoins();
+      } else {
+        document.getElementById("authGate").style.display = "block";
+      }
+    } catch {
+      document.getElementById("authGate").style.display = "block";
+    }
+  }
+
+  // ── Toast ──
+  function toast(msg, type = "success") {
+    const el = document.getElementById("toast");
+    el.className = `show ${type}`;
+    document.getElementById("toastMsg").textContent = msg;
+    setTimeout(() => { el.className = ""; }, 3000);
+  }
+
+  // ── Load coins ──
+  async function loadCoins() {
+    try {
+      const res = await fetch(`${API}/api/coins`, { credentials: "include" });
+      const coins = await res.json();
+      allInventory = Array.isArray(coins) ? coins : [];
+
+      // Stats
+      const withImages = allInventory.filter(c => c.image_key).length;
+      document.getElementById("statTotal").textContent = allInventory.length;
+      document.getElementById("statWithImages").textContent = withImages;
+      document.getElementById("statNoImages").textContent = allInventory.length - withImages;
+
+      renderInventory();
+    } catch (err) {
+      console.error(err);
+      toast("Failed to load inventory", "error");
+    }
+  }
+
+  function filteredInventory() {
+    const query = document.getElementById("inventorySearch")?.value.trim().toLowerCase() || "";
+    const type = document.getElementById("inventoryTypeFilter")?.value || "";
+    const stock = document.getElementById("inventoryStockFilter")?.value || "";
+
+    return allInventory.filter(item => {
+      const haystack = [item.name, item.sku, item.mint, item.metal].join(" ").toLowerCase();
+      if (query && !haystack.includes(query)) return false;
+      if (type && item.product_type !== type) return false;
+      if (stock === "in" && Number(item.qoh || 0) <= 0) return false;
+      if (stock === "out" && Number(item.qoh || 0) > 0) return false;
+      if (stock === "missing-image" && item.image_key) return false;
+      return true;
+    });
+  }
+
+  function renderInventory() {
+      const coins = filteredInventory();
+      const grid = document.getElementById("coinsGrid");
+      if (!coins.length) {
+        grid.innerHTML = `<div class="empty-state"><div class="empty-icon">🪙</div>No coins yet. Add one above.</div>`;
+        return;
+      }
+      coinNames.clear();
+      coins.forEach(coin => coinNames.set(Number(coin.id), coin.name));
+      grid.innerHTML = coins.map(coin => renderCoinCard(coin)).join("");
+  }
+
+  function renderCoinCard(coin) {
+    const img1 = coin.image1?.card_url || coin.card_url || null;
+    const img2 = coin.image2?.card_url || null;
+    const id = Number(coin.id);
+    const name = escapeHTML(coin.name);
+    const sku = escapeHTML(coin.sku || "");
+    const metal = escapeHTML(coin.metal);
+    const type = escapeHTML(coin.product_type || "coins");
+    const mint = escapeHTML(coin.mint);
+    const weight = coin.weight_oz ? ` · ${escapeHTML(coin.weight_oz)} oz` : "";
+    const qoh = Number(coin.qoh || 0);
+    const stockClass = qoh > 0 ? "success" : "error";
+    const stockText = qoh > 0 ? `${qoh} in stock` : "Out of stock";
+    const imgAlt = escapeAttr(`${coin.name} image`);
+
+    const slot = (imgUrl, slot) => `
+      <div class="coin-img-slot" id="slot-${id}-${slot}">
+        ${imgUrl
+          ? `<img src="${escapeAttr(imgUrl)}" alt="${imgAlt} ${slot}" loading="lazy">`
+          : `<div style="width:100%;height:100%;background:#0d0d0d;display:flex;align-items:center;justify-content:center;font-size:28px;color:#2D3135">🪙</div>`
+        }
+        <span class="img-label">${slot === 1 ? 'Front' : 'Back'}</span>
+        <div class="img-overlay">
+          <span class="upload-icon">↑</span>
+          <span>${imgUrl ? 'Replace' : 'Upload'}</span>
+        </div>
+        <input type="file" accept="image/*" onchange="uploadImage(event, ${id}, ${slot})" title="Upload image ${slot}">
+      </div>`;
+
+    return `
+      <div class="coin-card" id="card-${id}">
+        <div class="coin-images">
+          ${slot(img1, 1)}
+          ${slot(img2, 2)}
+        </div>
+        <div class="coin-info">
+          <div class="coin-name">${name}</div>
+          <div class="coin-meta">${sku} · ${type} · ${metal}${weight}${coin.mint ? ' · ' + mint : ''}</div>
+          <div class="edit-grid">
+            <input id="edit-sku-${id}" value="${sku}" placeholder="SKU">
+            <input id="edit-name-${id}" value="${name}" placeholder="Name">
+            <select id="edit-metal-${id}">
+              ${["gold","silver","platinum","palladium"].map(m => `<option value="${m}" ${coin.metal === m ? "selected" : ""}>${m}</option>`).join("")}
+            </select>
+            <select id="edit-type-${id}">
+              ${["coins","bars","rounds"].map(t => `<option value="${t}" ${(coin.product_type || "coins") === t ? "selected" : ""}>${t}</option>`).join("")}
+            </select>
+            <input id="edit-mint-${id}" value="${mint}" placeholder="Mint">
+            <input id="edit-weight-${id}" type="number" step="0.001" value="${coin.weight_oz ?? ""}" placeholder="Weight">
+            <input id="edit-purity-${id}" value="${escapeAttr(coin.purity || "")}" placeholder="Purity">
+            <input id="edit-year-${id}" type="number" value="${coin.year ?? ""}" placeholder="Year">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin:12px 0">
+            <label style="margin:0;color:#94A3B8">QOH</label>
+            <input
+              type="number"
+              id="edit-qoh-${id}"
+              min="0"
+              step="1"
+              value="${qoh}"
+              onchange="updateQoh(${id}, this.value)"
+              style="max-width:90px;padding:6px 8px"
+            >
+            <span style="font-size:11px;color:${stockClass === 'success' ? '#4ADE80' : '#F87171'}">${stockText}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="coin-id">ID: ${id}</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline" onclick="saveItem(${id})">Save</button>
+              <button class="btn btn-danger" onclick="deleteCoin(${id})">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ── Add coin ──
+  async function addCoin() {
+    const name     = document.getElementById("fName").value.trim();
+    const sku      = document.getElementById("fSku").value.trim();
+    const metal    = document.getElementById("fMetal").value;
+    const type     = document.getElementById("fType").value;
+    const mint     = document.getElementById("fMint").value.trim();
+    const weight   = document.getElementById("fWeight").value;
+    const purity   = document.getElementById("fPurity").value.trim();
+    const year     = document.getElementById("fYear").value;
+    const qoh      = document.getElementById("fQoh").value;
+    const status   = document.getElementById("addStatus");
+
+    if (!name || !sku || !metal) { toast("Name, SKU and metal are required", "error"); return; }
+
+    status.textContent = "Adding...";
+    try {
+      const res = await fetch(`${API}/api/coins`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, name, metal, product_type: type, mint: mint || undefined, weight_oz: weight || undefined, purity: purity || undefined, year: year || undefined, qoh: qoh || 0 })
+      });
+      const data = await res.json();
+      if (data.id) {
+        toast(`Coin added (ID: ${data.id})`);
+        status.textContent = "";
+        ["fSku","fName","fMint","fWeight","fPurity","fYear"].forEach(id => document.getElementById(id).value = "");
+        document.getElementById("fQoh").value = "0";
+        document.getElementById("fMetal").value = "";
+        loadCoins();
+      } else {
+        toast(data.error || "Failed to add coin", "error");
+        status.textContent = "";
+      }
+    } catch (err) {
+      toast("Network error", "error");
+      status.textContent = "";
+    }
+  }
+
+  async function saveItem(id) {
+    const body = {
+      sku: document.getElementById(`edit-sku-${id}`).value.trim(),
+      name: document.getElementById(`edit-name-${id}`).value.trim(),
+      metal: document.getElementById(`edit-metal-${id}`).value,
+      product_type: document.getElementById(`edit-type-${id}`).value,
+      mint: document.getElementById(`edit-mint-${id}`).value.trim(),
+      weight_oz: document.getElementById(`edit-weight-${id}`).value,
+      purity: document.getElementById(`edit-purity-${id}`).value.trim(),
+      year: document.getElementById(`edit-year-${id}`).value,
+      qoh: document.getElementById(`edit-qoh-${id}`).value || 0
+    };
+    if (!body.sku || !body.name || !body.metal) {
+      toast("SKU, name and metal are required", "error");
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/api/coins/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast(data.error || "Failed to save item", "error");
+        return;
+      }
+      toast("Item saved");
+      loadCoins();
+    } catch {
+      toast("Network error", "error");
+    }
+  }
+
+  // ── Update stock ──
+  async function updateQoh(id, value) {
+    const qoh = Math.max(0, parseInt(value, 10) || 0);
+    try {
+      const res = await fetch(`${API}/api/coins/${id}/stock`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qoh })
+      });
+      if (res.ok) {
+        toast(`QOH updated to ${qoh}`);
+        loadCoins();
+      } else {
+        const data = await res.json();
+        toast(data.error || "Failed to update QOH", "error");
+      }
+    } catch {
+      toast("Network error", "error");
+    }
+  }
+
+  // ── Upload image ──
+  async function uploadImage(event, coinId, slot) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const slotEl = document.getElementById(`slot-${coinId}-${slot}`);
+    slotEl.classList.add("uploading");
+    slotEl.querySelector(".img-overlay").innerHTML = `<span class="upload-icon upload-spinner">⟳</span><span>Uploading...</span>`;
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      const res = await fetch(`${API}/api/coins/${coinId}/image/${slot}`, {
+        method: "POST",
+        credentials: "include",
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(`Image ${slot === 1 ? 'front' : 'back'} uploaded`);
+        loadCoins();
+      } else {
+        toast(data.error || "Upload failed", "error");
+        slotEl.classList.remove("uploading");
+        slotEl.querySelector(".img-overlay").innerHTML = `<span class="upload-icon">↑</span><span>Upload</span>`;
+      }
+    } catch (err) {
+      toast("Upload error", "error");
+      slotEl.classList.remove("uploading");
+    }
+  }
+
+  // ── Delete coin ──
+  async function deleteCoin(id) {
+    const name = coinNames.get(Number(id)) || "this coin";
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API}/api/coins/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (res.ok) {
+        toast(`"${name}" deleted`);
+        loadCoins();
+      } else {
+        toast("Delete failed", "error");
+      }
+    } catch {
+      toast("Network error", "error");
+    }
+  }
+
+  checkAuth();
+  document.getElementById("inventorySearch")?.addEventListener("input", renderInventory);
+  document.getElementById("inventoryTypeFilter")?.addEventListener("change", renderInventory);
+  document.getElementById("inventoryStockFilter")?.addEventListener("change", renderInventory);
+</script>
+</body>
+</html>

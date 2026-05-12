@@ -71,6 +71,12 @@ async function syncCartOnLoad() {
 
 // ─── Cart UI ──────────────────────────────────────────────────────────────────
 
+function getProductMaxQty(product) {
+    if (!product) return 0;
+    if (product.qoh !== undefined) return Math.max(0, Number(product.qoh || 0));
+    return Infinity;
+}
+
 function openCart() {
     document.getElementById("cartDrawer").classList.add("open");
     document.getElementById("cartOverlay").classList.add("open");
@@ -97,17 +103,30 @@ function renderCartDrawer() {
     }
 
     let total = 0;
+    let cartChanged = false;
 
     itemsEl.innerHTML = cart.map((item, cartIndex) => {
         const p = products.find(prod => prod.id === item.id);
         if (!p) return "";
+        const maxQty = getProductMaxQty(p);
+        const displayQty = Math.min(item.qty, maxQty || item.qty);
+        if (maxQty <= 0) {
+            item.qty = 0;
+            cartChanged = true;
+            return "";
+        }
+        if (displayQty !== item.qty) {
+            item.qty = displayQty;
+            cartChanged = true;
+        }
 
         // Use dynamic wire price based on quantity
         const unitPrice = typeof calcWirePrice === "function"
-            ? calcWirePrice(p.metal, p.type, item.qty)
+            ? calcWirePrice(p.metal, p.type, displayQty)
             : p.price;
-        const subtotal = unitPrice * item.qty;
+        const subtotal = unitPrice * displayQty;
         total += subtotal;
+        const stockNote = Number.isFinite(maxQty) ? `<p class="cart-item-price">${maxQty} available</p>` : "";
 
         return `
             <div class="cart-item">
@@ -115,11 +134,12 @@ function renderCartDrawer() {
                 <div class="cart-item-info">
                     <p class="cart-item-name">${p.name}</p>
                     <p class="cart-item-price">$${unitPrice.toFixed(2)} / oz</p>
+                    ${stockNote}
                     <p class="cart-item-subtotal">$${subtotal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})} CAD</p>
                     <div class="cart-item-controls">
                         <div class="card-qty">
                             <button class="qty-btn" onclick="cartChangeQty(${cartIndex}, -1)">−</button>
-                            <span class="qty-value">${item.qty}</span>
+                            <span class="qty-value">${displayQty}</span>
                             <button class="qty-btn" onclick="cartChangeQty(${cartIndex}, 1)">+</button>
                         </div>
                         <button class="cart-remove-btn" onclick="cartRemove(${cartIndex})">Remove</button>
@@ -128,6 +148,13 @@ function renderCartDrawer() {
             </div>
         `;
     }).join("");
+    if (cartChanged) {
+        const inStockCart = cart.filter(item => item.qty > 0);
+        saveCart(inStockCart);
+        if (inStockCart.length === 0) {
+            itemsEl.innerHTML = `<p class="cart-empty">Your cart is empty.</p>`;
+        }
+    }
 
     if (totalEl) totalEl.innerText = "$" + total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + " CAD";
     updateCartCount();
@@ -135,7 +162,9 @@ function renderCartDrawer() {
 
 async function cartChangeQty(cartIndex, delta) {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    cart[cartIndex].qty = Math.max(1, cart[cartIndex].qty + delta);
+    const product = products.find(prod => prod.id === cart[cartIndex]?.id);
+    const maxQty = getProductMaxQty(product);
+    cart[cartIndex].qty = Math.max(1, Math.min(maxQty || 1, cart[cartIndex].qty + delta));
     await saveCart(cart);
     renderCartDrawer();
 }
@@ -203,7 +232,7 @@ async function handleCheckout() {
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     const cartBtn      = document.getElementById("cartBtn");
     const cartCloseBtn = document.getElementById("cartCloseBtn");
     const cartOverlay  = document.getElementById("cartOverlay");
@@ -214,5 +243,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (cartOverlay)  cartOverlay.addEventListener("click", closeCart);
     if (checkoutBtn)  checkoutBtn.addEventListener("click", handleCheckout);
 
+    if (typeof hydrateProductImages === "function") {
+        await hydrateProductImages(products);
+    }
     syncCartOnLoad();
 });
