@@ -1,19 +1,36 @@
-<link rel="stylesheet" href="css/coins.css">
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+    <!-- @partial:head-meta -->
+    <title>Coin Catalog – Atlantic Metals</title>
+    <meta name="description" content="Browse our coin catalog with live inventory.">
+    <link rel="stylesheet" href="css/core/style.css">
+    <link rel="stylesheet" href="css/core/store.css">
+    <link rel="stylesheet" href="css/pages/coins.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- @partial:cart -->
+    <!-- @partial:header -->
 
-<!-- inside <body>, after the sticky nav -->
-<div class="store-page">
-  <div class="breadcrumb">
-    <a href="index.html">Home</a>
-    <span>›</span>
-    <span>Coin Catalog</span>
-  </div>
-  <div id="coinGrid" class="coin-grid"></div>
-</div>
+    <div class="store-page">
+        <div class="breadcrumb">
+            <a href="index.html">Home</a>
+            <span>›</span>
+            <span>Coin Catalog</span>
+        </div>
+        <div id="coinGrid" class="coin-grid"></div>
+    </div>
 
-<!-- before </body> -->
-<script src="js/data.js"></script>
-<script src="js/script.js"></script>
-<script src="js/cart.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/coins.js"></script>
-<script src="js/footer.js"></script>
+    <!-- @partial:footer -->
+
+    <script src="js/core/data.js" defer></script>
+    <script src="js/core/product-images.js" defer></script>
+    <script src="js/core/pricing.js" defer></script>
+    <script src="js/core/search.js" defer></script>
+    <script src="js/core/site.js" defer></script>
+    <script src="js/core/cart.js" defer></script>
+    <script src="js/core/auth.js" defer></script>
+    <script src="js/pages/coins.js" defer></script>
+</body>
+</html>

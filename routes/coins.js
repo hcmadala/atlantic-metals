@@ -44,6 +44,19 @@ function parseQoh(value) {
   return Math.floor(n);
 }
 
+function parsePositiveNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parseYear(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const year = Number(value);
+  const currentYear = new Date().getFullYear() + 2;
+  return Number.isInteger(year) && year >= 1800 && year <= currentYear ? year : null;
+}
+
 function slugify(value) {
   return String(value || "")
     .toLowerCase()
@@ -56,9 +69,40 @@ function normalizeType(value) {
   return ["coins", "bars", "rounds"].includes(value) ? value : "coins";
 }
 
+function isUniqueConstraintError(err) {
+  return /unique constraint failed/i.test(String(err?.message || ""));
+}
+
+function validateCoinPayload(body) {
+  const name = String(body.name || "").trim();
+  const metal = String(body.metal || "").trim().toLowerCase();
+  const sku = slugify(body.sku || name);
+  const productType = normalizeType(body.product_type);
+  const mint = String(body.mint || "").trim() || null;
+  const purity = String(body.purity || "").trim() || null;
+  const weightOz = parsePositiveNumber(body.weight_oz);
+  const year = parseYear(body.year);
+  const qoh = parseQoh(body.qoh);
+
+  if (!name || !sku || !metal) return { error: "Name, SKU and metal required" };
+  if (!["gold", "silver", "platinum", "palladium"].includes(metal)) return { error: "Invalid metal" };
+  if (body.weight_oz !== undefined && body.weight_oz !== "" && weightOz === null) return { error: "Weight must be a positive number" };
+  if (body.year !== undefined && body.year !== "" && year === null) return { error: "Year is invalid" };
+
+  return {
+    value: { name, metal, sku, productType, mint, purity, weightOz, year, qoh, slug: slugify(name) }
+  };
+}
+
+async function coinExists(db, id) {
+  const { rows } = await db.execute({ sql: "SELECT id FROM coins WHERE id = ?", args: [id] });
+  return rows.length > 0;
+}
+
 module.exports = (db, { adminRequired }) => {
   router.post("/:id/image/1", adminRequired, upload.single("image"), async (req, res) => {
     try {
+      if (!await coinExists(db, req.params.id)) return res.status(404).json({ error: "Coin not found" });
       if (!req.file) return res.status(400).json({ error: "Image file required" });
       const result = await uploadToCloudinary(req.file.buffer, "coins");
       await db.execute({ sql: "UPDATE coins SET image_key = ? WHERE id = ?", args: [result.public_id, req.params.id] });
@@ -68,6 +112,7 @@ module.exports = (db, { adminRequired }) => {
   
   router.post("/:id/image/2", adminRequired, upload.single("image"), async (req, res) => {
     try {
+      if (!await coinExists(db, req.params.id)) return res.status(404).json({ error: "Coin not found" });
       if (!req.file) return res.status(400).json({ error: "Image file required" });
       const result = await uploadToCloudinary(req.file.buffer, "coins");
       await db.execute({ sql: "UPDATE coins SET image_key_2 = ? WHERE id = ?", args: [result.public_id, req.params.id] });
@@ -92,50 +137,47 @@ module.exports = (db, { adminRequired }) => {
 
 
   router.post("/", adminRequired, async (req, res) => {
-    const { name, metal, mint, weight_oz, purity, year } = req.body;
-    const sku = slugify(req.body.sku || name);
-    const productType = normalizeType(req.body.product_type);
-    const qoh = parseQoh(req.body.qoh);
-    if (!name || !metal || !sku) return res.status(400).json({ error: "Name, SKU and metal required" });
-    if (!["gold", "silver", "platinum", "palladium"].includes(metal)) {
-      return res.status(400).json({ error: "Invalid metal" });
-    }
+    const parsed = validateCoinPayload(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { name, metal, sku, productType, mint, weightOz, purity, year, qoh, slug } = parsed.value;
     try {
-      const slug = slugify(name);
       const result = await db.execute({
         sql:  "INSERT INTO coins (sku, name, slug, metal, product_type, mint, weight_oz, purity, year, qoh) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        args: [sku, name, slug, metal, productType, mint || null, weight_oz || null, purity || null, year || null, qoh]
+        args: [sku, name, slug, metal, productType, mint, weightOz, purity, year, qoh]
       });
       res.json({ success: true, id: Number(result.lastInsertRowid) });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
+    } catch (err) {
+      if (isUniqueConstraintError(err)) return res.status(409).json({ error: "SKU or slug already exists" });
+      console.error(err); res.status(500).json({ error: "Server error" });
+    }
   });
 
   router.put("/:id", adminRequired, async (req, res) => {
-    const { name, metal, mint, weight_oz, purity, year } = req.body;
-    const sku = slugify(req.body.sku || name);
-    const productType = normalizeType(req.body.product_type);
-    const qoh = parseQoh(req.body.qoh);
-    if (!name || !metal || !sku) return res.status(400).json({ error: "Name, SKU and metal required" });
-    if (!["gold", "silver", "platinum", "palladium"].includes(metal)) {
-      return res.status(400).json({ error: "Invalid metal" });
-    }
+    const parsed = validateCoinPayload(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { name, metal, sku, productType, mint, weightOz, purity, year, qoh, slug } = parsed.value;
 
     try {
-      await db.execute({
+      const result = await db.execute({
         sql: `UPDATE coins
               SET sku = ?, name = ?, slug = ?, metal = ?, product_type = ?,
                   mint = ?, weight_oz = ?, purity = ?, year = ?, qoh = ?
               WHERE id = ?`,
-        args: [sku, name, slugify(name), metal, productType, mint || null, weight_oz || null, purity || null, year || null, qoh, req.params.id]
+        args: [sku, name, slug, metal, productType, mint, weightOz, purity, year, qoh, req.params.id]
       });
+      if (Number(result.rowsAffected || 0) === 0) return res.status(404).json({ error: "Coin not found" });
       res.json({ success: true });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
+    } catch (err) {
+      if (isUniqueConstraintError(err)) return res.status(409).json({ error: "SKU or slug already exists" });
+      console.error(err); res.status(500).json({ error: "Server error" });
+    }
   });
 
   router.put("/:id/stock", adminRequired, async (req, res) => {
     const qoh = parseQoh(req.body.qoh);
     try {
-      await db.execute({ sql: "UPDATE coins SET qoh = ? WHERE id = ?", args: [qoh, req.params.id] });
+      const result = await db.execute({ sql: "UPDATE coins SET qoh = ? WHERE id = ?", args: [qoh, req.params.id] });
+      if (Number(result.rowsAffected || 0) === 0) return res.status(404).json({ error: "Coin not found" });
       res.json({ success: true, qoh });
     } catch (err) {
       console.error(err);
@@ -145,7 +187,8 @@ module.exports = (db, { adminRequired }) => {
 
   router.delete("/:id", adminRequired, async (req, res) => {
     try {
-      await db.execute({ sql: "DELETE FROM coins WHERE id = ?", args: [req.params.id] });
+      const result = await db.execute({ sql: "DELETE FROM coins WHERE id = ?", args: [req.params.id] });
+      if (Number(result.rowsAffected || 0) === 0) return res.status(404).json({ error: "Coin not found" });
       res.json({ success: true });
     } catch (err) {
       console.error(err);

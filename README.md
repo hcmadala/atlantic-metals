@@ -28,6 +28,8 @@ Browser (Vanilla JS, multi-page)
   │  fetch()
   ▼
 Express
+  ├── HTML pages       server-side partial assembly (partials/)
+  ├── /healthz         DB connectivity check
   ├── /auth/*          registration, login, verification
   ├── /cart            server-side cart persistence
   ├── /orders          checkout, order history
@@ -40,6 +42,18 @@ Express
          └── gold-api.com       spot price feed (5-min poll)
 ```
 
+Shared chrome (ticker, nav, cart drawer, footer) lives in `partials/` and is stitched into each HTML page by `lib/page-renderer.js` before the response is sent. No client-side layout fetch, no build step.
+
+### Frontend layout
+
+| Path | Purpose |
+|---|---|
+| `partials/` | Reusable HTML fragments (ticker, navbar, metal menu, cart, footer) |
+| `js/core/` | Shared client modules (site ticker, cart, auth, pricing, search) |
+| `js/pages/` | Page-specific scripts |
+| `css/core/` | Global styles |
+| `css/pages/` | Page-specific styles |
+
 ---
 
 ## Pricing
@@ -51,7 +65,7 @@ wire_price   = spot × (1 + margin) − bulk_discount
 credit_price = wire_price × 1.04
 ```
 
-Margins and bulk discount tiers are encoded as constants (`MARGINS`, `BULK_TIERS`) shared between runtimes — the server reads them from `js/pricing.js` via `require`, the browser loads the same file as a script tag. Keeping pricing logic as constants rather than database rows means changes go through code review and can't be corrupted by the admin UI.
+Margins and bulk discount tiers are encoded as constants (`MARGINS`, `BULK_TIERS`) shared between runtimes — the server reads them from `js/core/pricing.js` via `require`, the browser loads the same file as a script tag. Keeping pricing logic as constants rather than database rows means changes go through code review and can't be corrupted by the admin UI.
 
 The client computes prices locally for display, reading spot from `localStorage`. At checkout, the server recomputes from its in-memory cache and ignores the client-supplied price entirely. Spot can move between page load and order submission; the server's recalculation at order time is the authoritative value.
 
@@ -86,11 +100,11 @@ The current code doesn't check `rowsAffected` after the batch. If the guard fire
 
 ## Shared catalog
 
-`js/data.js` exports a plain JS array of product definitions. The browser loads it as a `<script>` tag. The server evaluates it at startup:
+`js/core/data.js` exports a plain JS array of product definitions. The browser loads it as a `<script>` tag. The server evaluates it at startup:
 
 ```javascript
 function loadProducts() {
-  const src = fs.readFileSync(`${__dirname}/js/data.js`, "utf8");
+  const src = fs.readFileSync(`${__dirname}/js/core/data.js`, "utf8");
   const ctx = vm.createContext({});
   return vm.runInContext(`${src}; products;`, ctx);
 }
@@ -163,7 +177,7 @@ JWT issued into an `httpOnly`, `SameSite=Lax` cookie, 7-day expiry. A few implem
 
 **`price_history`** — rolling 24-hour window. Trimmed on every write cycle with `DELETE WHERE timestamp < datetime('now', '-24 hours')`. Indexed on `(metal_type, timestamp)`.
 
-**`ny_close`** — one row per `(metal_type, close_date)`, upserted within a 10-minute detection window around 5:00 PM EST. Used for change-from-close display in the price ticker. The window detection uses a fixed UTC−5h offset — EDT is not accounted for, so close prices are misrecorded by one hour from March through November.
+**`ny_close`** — one row per `(metal_type, close_date)`, upserted within a 10-minute window around 5:00 PM America/New_York on weekdays. Used for change-from-close display in the price ticker. Spot API calls and `price_history` writes pause from Friday 5:00 PM NY through Sunday 6:00 PM NY.
 
 **`coins`** — live inventory. Matched to the static product catalog by `sku` (exact), then normalized name (lowercase, strip years, collapse whitespace). The normalization function exists in both the server and the frontend independently — a maintenance surface introduced by the no-build-step constraint.
 
@@ -202,23 +216,18 @@ Email verification is skipped (503) if `EMAIL_USER` and `EMAIL_PASS` are unset. 
 | `EMAIL_USER` / `EMAIL_PASS` | Gmail address + App Password |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | Required for image upload |
 | `RENDER_EXTERNAL_URL` | Set on Render; enables keep-alive self-ping every 10 min |
-| `NODE_ENV=production` | Enables `Secure` flag on JWT cookie |
+| `NODE_ENV=production` | Enables secure cookies and caches rendered HTML in memory |
+| `PORT` | HTTP port (Render sets this automatically) |
 
 ---
 
 ## Open issues
 
-**No rate limiting on `/auth/login` and `/auth/register`.** Straightforward to add with `express-rate-limit`; an in-memory store is fine for single-instance.
-
-**Inventory decrement result unchecked.** Described above. Affected row counts should be verified after `db.batch()` and the order rejected if any decrement missed.
+**Inventory decrement result unchecked.** Affected row counts should be verified after `db.batch()` and the order rejected if any decrement missed.
 
 **Missing partial unique index on `users.email`.** Concurrent registrations with the same address can produce duplicate rows. `CREATE UNIQUE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL` closes it.
 
-**EDT offset in NY close detection.** `isNYCloseWindow()` uses UTC−5h unconditionally. Close prices are recorded one hour late during daylight saving time.
-
-**`mongoose` in `package.json`.** Unused. Leftover from an earlier iteration.
-
-**`server.js` is large.** Auth, pricing, cart, orders, profile, DB initialization, and the background worker share a single file. Not a runtime concern, but it makes isolated testing impractical. The natural split is `routes/`, `services/pricing.js`, `services/price-worker.js`, `db/index.js`.
+**`server.js` is large.** Auth, pricing, cart, orders, profile, DB initialization, and the background worker share a single file. The natural split is `routes/`, `services/pricing.js`, `services/price-worker.js`, `db/index.js`.
 
 ---
 
@@ -228,9 +237,9 @@ Separating the price worker into its own process is the most useful architectura
 
 Moving the product catalog to a `products` table decouples operations from deployments. Right now, adding a product requires a code change and a deploy. That's acceptable at the current catalog size but becomes friction as it grows.
 
-`helmet` and `express-rate-limit` are both small additions that close obvious gaps with no architectural implications.
-
 TypeScript would make the shared pricing constants safe across runtimes. Currently a mistake in `MARGINS` or `BULK_TIERS` propagates silently to both the server calculation and the client display; typed schemas would surface it at compile time.
+
+Automated browser tests (Playwright) for register → verify → checkout would catch regressions in the multi-page flow that smoke scripts cannot.
 
 ---
 
@@ -244,6 +253,7 @@ TypeScript would make the shared pricing constants safe across runtimes. Current
 | Auth | `jsonwebtoken`, `bcryptjs` |
 | Email | `nodemailer` + Gmail SMTP |
 | Upload | `multer` (memory storage) |
-| Frontend | Vanilla JS, no build step |
+| Security | `helmet`, `express-rate-limit` |
+| Frontend | Vanilla JS (`js/core` + `js/pages`), server-side HTML partials |
 | Hosting | Render |
 | Pricing feed | gold-api.com (XAU / XAG / XPT / XPD) |

@@ -1,6 +1,7 @@
 .DS_Store
+**/.DS_Store
 .env
+.env.local
+ny_close.json
 node_modules/
 npm-debug.log*
-.env
-.env.example

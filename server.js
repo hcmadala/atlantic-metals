@@ -1,5 +1,7 @@
 require("dotenv").config();
 const express          = require("express");
+const helmet           = require("helmet");
+const rateLimit        = require("express-rate-limit");
 const bcrypt           = require("bcryptjs");
 const jwt              = require("jsonwebtoken");
 const cookieParser     = require("cookie-parser");
@@ -9,11 +11,29 @@ const nodemailer       = require("nodemailer");
 const fs               = require("fs");
 const vm               = require("vm");
 const coinsRouter      = require("./routes/coins");
+const { createPageMiddleware } = require("./lib/page-renderer");
 
 const app = express();
-app.use(express.static(__dirname));
-app.use(express.json());
+const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.RENDER);
+
+app.set("trust proxy", 1);
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Please try again later." }
+});
+app.use("/auth/login", authLimiter);
+app.use("/auth/register", authLimiter);
+app.use("/auth/resend-verification", authLimiter);
 
 const JWT_SECRET  = process.env.JWT_SECRET;
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
@@ -67,8 +87,7 @@ async function sendVerificationEmail(email, firstName, code) {
     throw new Error("Email transporter is not configured");
   }
 
-  try {
-    await transporter.sendMail({
+  const sendPromise = transporter.sendMail({
       from: '"Atlantic Metals" <no-reply@atlanticmetals.ca>',
       to: email,
       subject: "Verify your Atlantic Metals account",
@@ -83,15 +102,24 @@ async function sendVerificationEmail(email, firstName, code) {
           <p style="color:#888;font-size:13px">This code expires in 15 minutes. If you did not create an account you can ignore this email.</p>
         </div>
       `
-    });
-    console.log("Email sent to", email);
-  } catch (err) {
-    console.error("Email send error:", err.message);
-  }
+  });
+
+  const timeoutMs = 12_000;
+  await Promise.race([
+    sendPromise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Email send timed out")), timeoutMs)
+    )
+  ]);
+  console.log("Email sent to", email);
 }
 
 function isAdminEmail(email) {
   return ADMIN_EMAILS.includes(String(email || "").toLowerCase());
+}
+
+function isUniqueConstraintError(err) {
+  return /unique constraint failed/i.test(String(err?.message || ""));
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -104,7 +132,7 @@ function parseJSON(v, fallback = []) {
 }
 
 function loadProducts() {
-  const source = fs.readFileSync(`${__dirname}/js/data.js`, "utf8");
+  const source = fs.readFileSync(`${__dirname}/js/core/data.js`, "utf8");
   const context = {};
   vm.createContext(context);
   const loadedProducts = vm.runInContext(`${source}; products;`, context);
@@ -114,6 +142,7 @@ function loadProducts() {
 const products = loadProducts();
 const productsById = new Map(products.map(product => [Number(product.id), product]));
 const productsBySku = new Map(products.map(product => [String(product.sku || ""), product]).filter(([sku]) => sku));
+const SPOT_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 
 function normalizeName(value) {
   return String(value || "")
@@ -168,6 +197,51 @@ function getSpotPrice(metal) {
   return cache.data?.[codeMap[metal]] || fallback[metal] || 0;
 }
 
+function isSpotCacheFresh(now = Date.now()) {
+  return cache.data && METALS.every(m => cache.data[m] != null) && now - cache.timestamp <= SPOT_CACHE_MAX_AGE_MS;
+}
+
+function isSpotUsableForCheckout(now = new Date()) {
+  return Boolean(cache.data && METALS.every(m => cache.data[m] != null) && (isSpotFetchHalted(now) || isSpotCacheFresh(now.getTime())));
+}
+
+async function fetchSpotPrices() {
+  const results = {};
+  for (const metal of METALS) {
+    const response = await fetch(`https://api.gold-api.com/price/${metal}`);
+    if (!response.ok) throw new Error(`Spot fetch failed for ${metal}: ${response.status}`);
+    const data = await response.json();
+    if (!Number.isFinite(Number(data.price))) throw new Error(`Invalid spot price for ${metal}`);
+    results[metal] = Number(data.price);
+  }
+  return results;
+}
+
+async function refreshSpotCache() {
+  cache.data = await fetchSpotPrices();
+  cache.timestamp = Date.now();
+  cache.source = "live";
+  return cache.data;
+}
+
+async function ensureFreshSpotForCheckout() {
+  const now = new Date();
+  if (isSpotUsableForCheckout(now)) return;
+
+  if (!isSpotFetchHalted(now)) {
+    await refreshSpotCache();
+  } else {
+    await ensureSpotCache();
+  }
+
+  if (!isSpotUsableForCheckout(now)) {
+    const err = new Error("Live spot prices are temporarily unavailable. Please try checkout again shortly.");
+    err.statusCode = 503;
+    err.code = "STALE_SPOT_PRICE";
+    throw err;
+  }
+}
+
 function calcWirePrice(metal, type, quantity) {
   const spot = getSpotPrice(metal);
   const margin = MARGINS[metal]?.[type] ?? 0.05;
@@ -178,6 +252,7 @@ function calcWirePrice(metal, type, quantity) {
 
 async function buildOrderItems(rawItems) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) return null;
+  await ensureFreshSpotForCheckout();
 
   const { rows: coinRows } = await db.execute({
     sql: "SELECT id, sku, name, qoh FROM coins",
@@ -186,7 +261,7 @@ async function buildOrderItems(rawItems) {
   const coinsByName = new Map(coinRows.map(coin => [normalizeName(coin.name), coin]));
   const coinsBySku = new Map(coinRows.filter(coin => coin.sku).map(coin => [coin.sku, coin]));
 
-  return rawItems.map(item => {
+  const items = rawItems.map(item => {
     const productId = Number(item.productId ?? item.id);
     const product = productsById.get(productId);
     const qty = Math.max(1, Math.min(9999, parseInt(item.qty, 10) || 0));
@@ -207,6 +282,7 @@ async function buildOrderItems(rawItems) {
       price
     };
   }).filter(Boolean);
+  return items.length === rawItems.length ? items : null;
 }
 
 // ─── Create / Migrate Tables ─────────────────────────────────────────────────
@@ -276,6 +352,10 @@ async function initDB() {
       args: []
     },
     {
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_active_email ON users(lower(email)) WHERE deleted_at IS NULL`,
+      args: []
+    },
+    {
       sql: `CREATE TABLE IF NOT EXISTS ny_close (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         metal_type TEXT NOT NULL,
@@ -335,10 +415,6 @@ async function initDB() {
     });
   }
 
-  // Note: email uniqueness is enforced in code (non-deleted rows only), so no
-  // UNIQUE index on email is needed — same logic as before, just no DROP INDEX
-  // step because SQLite never had one.
-
   console.log("Turso (SQLite) tables ready");
 }
 
@@ -385,7 +461,7 @@ function setAuthCookie(res, token) {
   res.cookie("token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isProduction,
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
 }
@@ -433,9 +509,14 @@ app.post("/auth/register", async (req, res) => {
       });
     }
 
-    await sendVerificationEmail(email, firstName, code);
     res.json({ success: true, message: "Verification code sent" });
+    sendVerificationEmail(email, firstName, code).catch(err => {
+      console.error("Verification email failed:", err.message);
+    });
   } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return res.status(400).json({ code: "EMAIL_EXISTS", error: "Email already registered" });
+    }
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
@@ -496,8 +577,10 @@ app.post("/auth/resend-verification", async (req, res) => {
       args: [code, expires, user.id]
     });
 
-    await sendVerificationEmail(email, user.first_name, code);
     res.json({ success: true });
+    sendVerificationEmail(email, user.first_name, code).catch(err => {
+      console.error("Verification email failed:", err.message);
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -565,27 +648,41 @@ app.delete("/auth/account", authRequired, async (req, res) => {
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
 app.post("/orders", authRequired, async (req, res) => {
+  let tx = null;
   try {
     const items = await buildOrderItems(req.body.items);
     if (!items || !items.length) return res.status(400).json({ error: "No valid items or insufficient stock" });
 
     const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-    const result = await db.execute({
+    tx = await db.transaction("write");
+
+    const result = await tx.execute({
       sql:  "INSERT INTO orders (user_id, items, total) VALUES (?, ?, ?)",
       args: [req.user.id, JSON.stringify(items), total]
     });
 
-    const stockUpdates = items
-      .filter(item => item.coinId)
-      .map(item => ({
+    for (const item of items.filter(item => item.coinId)) {
+      const update = await tx.execute({
         sql: "UPDATE coins SET qoh = qoh - ? WHERE id = ? AND qoh >= ?",
         args: [item.qty, item.coinId, item.qty]
-      }));
-    if (stockUpdates.length) await db.batch(stockUpdates, "write");
+      });
+      if (Number(update.rowsAffected || 0) !== 1) {
+        const err = new Error("Insufficient stock");
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+
+    await tx.commit();
+    tx = null;
 
     // LibSQL returns lastInsertRowid as BigInt — convert to Number for JSON
     res.json({ success: true, orderId: Number(result.lastInsertRowid) });
   } catch (err) {
+    if (tx) await tx.rollback().catch(() => {});
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ code: err.code, error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
@@ -812,39 +909,175 @@ app.delete("/profile/card/:index", authRequired, async (req, res) => {
 });
 
 // ─── NY Close Helpers ─────────────────────────────────────────────────────────
-function isNYCloseWindow() {
-  const now        = new Date();
-  const estOffset  = -5 * 60;
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const estMinutes = ((utcMinutes + estOffset) % (24 * 60) + 24 * 60) % (24 * 60);
-  const estHour    = Math.floor(estMinutes / 60);
-  const estMin     = estMinutes % 60;
-  const estDay     = new Date(now.getTime() + estOffset * 60000).getUTCDay();
-  return estDay >= 1 && estDay <= 5 && estHour === 17 && estMin < 10;
+function getNYWallClock(now = new Date()) {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  }).format(now);
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+
+  const hour   = parseInt(parts.find(p => p.type === "hour").value, 10);
+  const minute = parseInt(parts.find(p => p.type === "minute").value, 10);
+  return { weekday, hour, minute, minutesSinceMidnight: hour * 60 + minute };
 }
 
-function getLastCloseDate() {
-  const now       = new Date();
-  const estOffset = -5 * 60;
-  const estTime   = new Date(now.getTime() + estOffset * 60000);
-  let d           = new Date(estTime);
-  if (estTime.getUTCHours() < 17) d.setUTCDate(d.getUTCDate() - 1);
-  const dow = d.getUTCDay();
-  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2);
-  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
+// Fri 5pm – Sun 6pm NY: pause spot API + price_history writes (markets flat).
+function isSpotFetchHalted(now = new Date()) {
+  const { weekday, minutesSinceMidnight } = getNYWallClock(now);
+  if (weekday === "Fri" && minutesSinceMidnight >= 17 * 60) return true;
+  if (weekday === "Sat") return true;
+  if (weekday === "Sun" && minutesSinceMidnight < 18 * 60) return true;
+  return false;
+}
+
+function isNYCloseWindow(now = new Date()) {
+  const { weekday, hour, minute } = getNYWallClock(now);
+  return ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday) && hour === 17 && minute < 10;
+}
+
+function getNYDateString(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year:   "numeric",
+    month:  "2-digit",
+    day:    "2-digit",
+  }).format(now);
+}
+
+function getPreviousWeekdayDateString(now, weekdays) {
+  let cursor = now;
+  for (let i = 0; i < 8; i++) {
+    if (weekdays.includes(getNYWallClock(cursor).weekday))
+      return getNYDateString(cursor);
+    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+  }
+  return getNYDateString(now);
+}
+
+function getLastCloseDate(now = new Date()) {
+  const { weekday, minutesSinceMidnight } = getNYWallClock(now);
+
+  if (isSpotFetchHalted(now))
+    return getPreviousWeekdayDateString(now, ["Fri"]);
+
+  if (minutesSinceMidnight < 17 * 60)
+    return getPreviousWeekdayDateString(now, ["Mon", "Tue", "Wed", "Thu", "Fri"]);
+
+  return getNYDateString(now);
+}
+
+function dedupeConsecutivePrices(prices) {
+  if (!prices.length) return [];
+  const out = [prices[0]];
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] !== out[out.length - 1]) out.push(prices[i]);
+  }
+  return out;
+}
+
+const METALS = ["XAU", "XAG", "XPT", "XPD"];
+
+async function buildSparklineHistory() {
+  const { rows: historyRows } = await db.execute({
+    sql:  `SELECT metal_type, price
+           FROM price_history
+           WHERE timestamp >= datetime('now', '-24 hours')
+           ORDER BY timestamp ASC`,
+    args: []
+  });
+
+  const history = { XAU: [], XAG: [], XPT: [], XPD: [] };
+  for (const row of historyRows) {
+    if (history[row.metal_type] !== undefined)
+      history[row.metal_type].push(parseFloat(row.price));
+  }
+  for (const metal of METALS) {
+    history[metal] = dedupeConsecutivePrices(history[metal]);
+    if (history[metal].length > 30) history[metal] = history[metal].slice(-30);
+  }
+
+  return history;
+}
+
+async function getNyClosePrices() {
+  const nyClose   = { XAU: null, XAG: null, XPT: null, XPD: null };
+  const closeDate = getLastCloseDate();
+
+  const { rows: closeRows } = await db.execute({
+    sql:  "SELECT metal_type, price FROM ny_close WHERE close_date = ?",
+    args: [closeDate]
+  });
+  for (const row of closeRows)
+    nyClose[row.metal_type] = parseFloat(row.price);
+
+  const missing = METALS.filter(m => nyClose[m] == null);
+  if (missing.length) {
+    const { rows: fallbackRows } = await db.execute({
+      sql: `SELECT metal_type, price
+            FROM ny_close n
+            WHERE metal_type IN (${missing.map(() => "?").join(",")})
+              AND close_date = (
+                SELECT MAX(close_date) FROM ny_close WHERE metal_type = n.metal_type
+              )`,
+      args: missing
+    });
+    for (const row of fallbackRows) {
+      if (nyClose[row.metal_type] == null)
+        nyClose[row.metal_type] = parseFloat(row.price);
+    }
+  }
+
+  return nyClose;
+}
+
+async function getLastKnownSpotPrices() {
+  const prices = { XAU: null, XAG: null, XPT: null, XPD: null };
+
+  const { rows: historyRows } = await db.execute({
+    sql: `SELECT metal_type, price
+          FROM price_history
+          WHERE id IN (SELECT MAX(id) FROM price_history GROUP BY metal_type)`,
+    args: []
+  });
+  for (const row of historyRows) {
+    if (prices[row.metal_type] !== undefined)
+      prices[row.metal_type] = parseFloat(row.price);
+  }
+
+  const nyClose = await getNyClosePrices();
+  for (const metal of METALS) {
+    if (prices[metal] == null && nyClose[metal] != null)
+      prices[metal] = nyClose[metal];
+  }
+
+  return prices;
+}
+
+async function ensureSpotCache() {
+  const hasPrices = cache.data && METALS.every(m => cache.data[m] != null);
+  if (hasPrices) return cache.data;
+  cache.data      = await getLastKnownSpotPrices();
+  cache.timestamp = 0;
+  cache.source    = "last-known";
+  return cache.data;
 }
 
 // ─── Price History Worker ─────────────────────────────────────────────────────
 async function recordPrices() {
   try {
-    const metals  = ["XAU", "XAG", "XPT", "XPD"];
-    const results = {};
-    for (const metal of metals) {
-      const response = await fetch(`https://api.gold-api.com/price/${metal}`);
-      const data     = await response.json();
-      results[metal] = data.price;
+    // Fri 5pm – Sun 6pm NY: no API fetch, no DB writes (keeps price_history clean).
+    if (isSpotFetchHalted() && !isNYCloseWindow()) {
+      await ensureSpotCache();
+      return;
     }
+
+    const results = await fetchSpotPrices();
 
     const inCloseWindow = isNYCloseWindow();
     const closeDate     = getLastCloseDate();
@@ -881,6 +1114,7 @@ async function recordPrices() {
 
     cache.data      = results;
     cache.timestamp = Date.now();
+    cache.source    = "live";
     console.log(`[${new Date().toISOString()}] Price history recorded${inCloseWindow ? " [NY CLOSE CAPTURED]" : ""}`);
   } catch (err) {
     console.error("Price history worker error:", err.message);
@@ -894,60 +1128,40 @@ function startPriceHistoryWorker() {
 }
 
 // ─── Prices ───────────────────────────────────────────────────────────────────
-let cache = { data: null, timestamp: 0 };
+let cache = { data: null, timestamp: 0, source: "empty" };
 
 app.get("/prices", async (req, res) => {
-  const now = Date.now();
+  const now    = Date.now();
+  const halted = isSpotFetchHalted();
   try {
-    if (!cache.data || now - cache.timestamp >= 60000) {
-      const metals  = ["XAU", "XAG", "XPT", "XPD"];
-      const results = {};
-      for (const metal of metals) {
-        const response = await fetch(`https://api.gold-api.com/price/${metal}`);
-        const data     = await response.json();
-        results[metal] = data.price;
-      }
-      cache.data      = results;
-      cache.timestamp = now;
+    if (!halted && (!cache.data || now - cache.timestamp >= 60000)) {
+      await refreshSpotCache();
+    } else {
+      await ensureSpotCache();
     }
 
-    const { rows: historyRows } = await db.execute({
-      sql:  `SELECT metal_type, price, timestamp
-             FROM price_history
-             WHERE timestamp >= datetime('now', '-24 hours')
-             ORDER BY timestamp ASC`,
-      args: []
+    const history = await buildSparklineHistory();
+    const nyClose = await getNyClosePrices();
+
+    res.json({
+      ...(cache.data || {}),
+      history,
+      nyClose,
+      stale: !halted && !isSpotCacheFresh(),
+      spotTimestamp: cache.timestamp || null
     });
-
-    const history = { XAU: [], XAG: [], XPT: [], XPD: [] };
-    for (const row of historyRows) {
-      if (history[row.metal_type] !== undefined)
-        history[row.metal_type].push(parseFloat(row.price));
-    }
-    for (const metal of Object.keys(history)) {
-      if (history[metal].length > 30) history[metal] = history[metal].slice(-30);
-    }
-
-    const closeDate = getLastCloseDate();
-    const { rows: closeRows } = await db.execute({
-      sql:  "SELECT metal_type, price FROM ny_close WHERE close_date = ?",
-      args: [closeDate]
-    });
-    const nyClose = { XAU: null, XAG: null, XPT: null, XPD: null };
-    for (const row of closeRows) {
-      nyClose[row.metal_type] = parseFloat(row.price);
-    }
-
-    res.json({ ...cache.data, history, nyClose });
   } catch (error) {
     console.error("Error fetching prices:", error);
-    res.json({
+    await ensureSpotCache().catch(() => {});
+    res.status(isSpotCacheFresh() || halted ? 200 : 503).json({
       XAU: cache.data?.XAU ?? null,
       XAG: cache.data?.XAG ?? null,
       XPT: cache.data?.XPT ?? null,
       XPD: cache.data?.XPD ?? null,
       history: { XAU: [], XAG: [], XPT: [], XPD: [] },
-      nyClose: { XAU: null, XAG: null, XPT: null, XPD: null }
+      nyClose: { XAU: null, XAG: null, XPT: null, XPD: null },
+      stale: !halted,
+      spotTimestamp: cache.timestamp || null
     });
   }
 });
@@ -955,4 +1169,17 @@ app.get("/prices", async (req, res) => {
 // Pass the Turso db client to the coins router (instead of the old mysql2 pool)
 app.use("/api/coins", coinsRouter(db, { adminRequired }));
 
-app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+app.get("/healthz", async (_req, res) => {
+  try {
+    await db.execute({ sql: "SELECT 1", args: [] });
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+});
+
+app.use(createPageMiddleware());
+app.use(express.static(__dirname, { index: false }));
+
+const port = Number(process.env.PORT) || 3000;
+app.listen(port, () => console.log(`Server running on http://localhost:${port}`));

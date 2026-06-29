@@ -1,0 +1,255 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: #1a1a1a;
+  color: #fff;
+  min-height: 100vh;
+}
+
+.is-hidden { display: none; }
+.admin-login-link { display: inline-block; text-decoration: none; }
+.form-status { font-size: 13px; color: #94A3B8; }
+ /* ── Header ── */
+.admin-header {
+  background: #111214;
+  border-bottom: 1px solid #2D3135;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.admin-header .brand { color: #c9a84c; font-size: 18px; font-weight: 700; text-decoration: none; }
+.admin-header .badge {
+  background: #c9a84c22;
+  color: #c9a84c;
+  border: 1px solid #c9a84c44;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+ /* ── Layout ── */
+.admin-body {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+ /* ── Auth Gate ── */
+#authGate {
+  max-width: 400px;
+  margin: 80px auto;
+  background: #111214;
+  border: 1px solid #2D3135;
+  border-radius: 12px;
+  padding: 40px;
+}
+#authGate h2 { color: #c9a84c; margin-bottom: 24px; font-size: 20px; }
+#authGate p  { color: #94A3B8; font-size: 13px; margin-bottom: 24px; }
+ /* ── Section title ── */
+.section-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2D3135;
+}
+.section-title span { color: #c9a84c; }
+ /* ── Cards ── */
+.panel {
+  background: #111214;
+  border: 1px solid #2D3135;
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 40px;
+}
+ /* ── Form ── */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.form-grid .full { grid-column: 1 / -1; }
+ label {
+  display: block;
+  font-size: 12px;
+  color: #94A3B8;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+input, select {
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #2D3135;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #fff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus, select:focus { border-color: #c9a84c; }
+select option { background: #1a1a1a; }
+ .btn {
+  padding: 11px 24px;
+  border-radius: 8px;
+  border: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-gold   { background: #c9a84c; color: #000; }
+.btn-gold:hover { background: #b8973f; }
+.btn-outline { background: transparent; color: #c9a84c; border: 1px solid #c9a84c44; }
+.btn-outline:hover { background: #c9a84c11; }
+.btn-danger { background: transparent; color: #F87171; border: 1px solid #F8717133; font-size: 12px; padding: 6px 14px; }
+.btn-danger:hover { background: #F8717111; }
+ .form-actions { margin-top: 20px; display: flex; gap: 12px; align-items: center; }
+.admin-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 160px 160px;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+ /* ── Coins grid ── */
+.coins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+ .coin-card {
+  background: #1a1a1a;
+  border: 1px solid #2D3135;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.coin-card:hover { border-color: #c9a84c44; transform: translateY(-2px); }
+ .coin-images {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: #111214;
+}
+.coin-img-slot {
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.coin-img-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s;
+}
+.coin-img-slot .img-overlay {
+  position: absolute;
+  inset: 0;
+  background: #00000088;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 11px;
+  color: #c9a84c;
+  gap: 4px;
+}
+.coin-img-slot:hover .img-overlay { opacity: 1; }
+.coin-img-slot .img-overlay .upload-icon { font-size: 22px; }
+.coin-img-slot .img-label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 10px;
+  color: #94A3B8;
+  background: #00000088;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.coin-img-slot input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+}
+ .coin-info { padding: 16px; }
+.coin-info .coin-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.coin-info .coin-meta { font-size: 12px; color: #94A3B8; margin-bottom: 12px; }
+.coin-info .coin-id   { font-size: 11px; color: #2D3135; }
+ /* ── Toast ── */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #111214;
+  border: 1px solid #2D3135;
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 999;
+  min-width: 240px;
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.success { border-color: #4ADE8044; }
+#toast.error   { border-color: #F8717144; }
+#toast .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+#toast.success .dot { background: #4ADE80; }
+#toast.error   .dot { background: #F87171; }
+ /* ── Upload progress ── */
+.uploading { opacity: 0.6; pointer-events: none; }
+.upload-spinner { animation: spin 0.8s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+ /* ── Empty state ── */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #94A3B8;
+  font-size: 14px;
+}
+.empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+ /* ── Stats bar ── */
+.stats-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.stat-pill {
+  background: #111214;
+  border: 1px solid #2D3135;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 13px;
+}
+.stat-pill .num { font-size: 22px; font-weight: 700; color: #c9a84c; display: block; }
+ @media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .coins-grid { grid-template-columns: 1fr; }
+  .stats-bar { flex-wrap: wrap; }
+  .admin-body { padding: 20px 16px; }
+}

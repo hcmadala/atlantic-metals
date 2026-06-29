@@ -1,178 +1,71 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-CA">
 <head>
-    <title>Login – Atlantic Metals</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/store.css">
-    <link rel="stylesheet" href="css/login.css">
+    <!-- @partial:head-meta -->
+    <title>Sign In – Atlantic Metals</title>
+    <meta name="description" content="Sign in or create your Atlantic Metals account to track orders and checkout faster.">
+    <link rel="stylesheet" href="css/core/style.css">
+    <link rel="stylesheet" href="css/core/store.css">
+    <link rel="stylesheet" href="css/pages/login.css">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- @partial:cart -->
+    <!-- @partial:header -->
+
     <main>
-
-    <!-- CART DRAWER -->
-    <div class="cart-overlay" id="cartOverlay"></div>
-    <div class="cart-drawer" id="cartDrawer">
-        <div class="cart-drawer-header">
-            <h2>Your Cart</h2>
-            <button class="cart-close-btn" id="cartCloseBtn">✕</button>
-        </div>
-        <div class="cart-drawer-items" id="cartDrawerItems"></div>
-        <div class="cart-drawer-footer">
-            <div class="cart-total-row">
-                <span>Total</span>
-                <span id="cartTotal">$0.00</span>
-            </div>
-            <button class="checkout-btn">Checkout</button>
-        </div>
-    </div>
-
-    <div class="sticky-wrapper">
-        <div class="ticker">
-            <a href="products.html?metal=gold" class="metal-card">
-                <div class="metal-info">
-                    <span class="metal-name gold-text">Gold</span>
-                    <span id="gold-price" class="metal-price gold">--</span>
-                    <canvas id="gold-chart" width="60" height="18"></canvas>
-                    <span id="gold-arrow" class="arrow unchanged">•</span>
-                    <span id="gold-change" class="metal-change">--</span>
-                </div>
-            </a>
-            <a href="products.html?metal=silver" class="metal-card">
-                <div class="metal-info">
-                    <span class="metal-name silver-text">Silver</span>
-                    <span id="silver-price" class="metal-price silver">--</span>
-                    <canvas id="silver-chart" width="60" height="18"></canvas>
-                    <span id="silver-arrow" class="arrow unchanged">•</span>
-                    <span id="silver-change" class="metal-change">--</span>
-                </div>
-            </a>
-            <a href="products.html?metal=platinum" class="metal-card">
-                <div class="metal-info">
-                    <span class="metal-name platinum-text">Platinum</span>
-                    <span id="platinum-price" class="metal-price platinum">--</span>
-                    <canvas id="platinum-chart" width="60" height="18"></canvas>
-                    <span id="platinum-arrow" class="arrow unchanged">•</span>
-                    <span id="platinum-change" class="metal-change">--</span>
-                </div>
-            </a>
-            <a href="products.html?metal=palladium" class="metal-card">
-                <div class="metal-info">
-                    <span class="metal-name palladium-text">Palladium</span>
-                    <span id="palladium-price" class="metal-price palladium">--</span>
-                    <canvas id="palladium-chart" width="60" height="18"></canvas>
-                    <span id="palladium-arrow" class="arrow unchanged">•</span>
-                    <span id="palladium-change" class="metal-change">--</span>
-                </div>
-            </a>
-        </div>
-        <div class="navbar">
-            <a href="index.html" class="brand">Atlantic Metals</a>
-            <div class="navbar-right">
-                <div class="nav-search-wrap">
-                    <input type="text" class="nav-search" id="navSearch" placeholder="Search products...">
-                    <span class="nav-search-icon">🔍</span>
-                </div>
-                <a href="login.html" class="nav-login" id="navAccount">Login</a>
-                <a class="nav-cart" id="cartBtn">
-                    🛒 Cart
-                    <span class="cart-count" id="cartCount">0</span>
-                </a>
-            </div>
-        </div>
-
-        <nav class="metal-menu">
-            <div class="metal-item">
-                <a href="products.html">Shop All</a>
-            </div>
-            <div class="metal-item">
-                <a href="products.html?metal=gold">Gold</a>
-                <div class="dropdown">
-                    <a href="products.html?metal=gold&type=bars">Bars</a>
-                    <a href="products.html?metal=gold&type=coins">Coins</a>
-                    <a href="products.html?metal=gold&type=rounds">Rounds</a>
-                </div>
-            </div>
-            <div class="metal-item">
-                <a href="products.html?metal=silver">Silver</a>
-                <div class="dropdown">
-                    <a href="products.html?metal=silver&type=bars">Bars</a>
-                    <a href="products.html?metal=silver&type=coins">Coins</a>
-                    <a href="products.html?metal=silver&type=rounds">Rounds</a>
-                </div>
-            </div>
-            <div class="metal-item">
-                <a href="products.html?metal=platinum">Platinum</a>
-                <div class="dropdown">
-                    <a href="products.html?metal=platinum&type=bars">Bars</a>
-                    <a href="products.html?metal=platinum&type=coins">Coins</a>
-                    <a href="products.html?metal=platinum&type=rounds">Rounds</a>
-                </div>
-            </div>
-            <div class="metal-item">
-                <a href="products.html?metal=palladium">Palladium</a>
-                <div class="dropdown">
-                    <a href="products.html?metal=palladium&type=bars">Bars</a>
-                    <a href="products.html?metal=palladium&type=coins">Coins</a>
-                    <a href="products.html?metal=palladium&type=rounds">Rounds</a>
-                </div>
-            </div>
-        </nav>
-    </div>
-
     <div class="auth-page">
         <div class="auth-box">
             <h2>Atlantic Metals</h2>
             <p>Sign in to track orders and save your details</p>
             <div class="auth-tabs">
-                <button class="auth-tab active" id="tabSignIn" onclick="switchTab('login')">Sign In</button>
-                <button class="auth-tab" id="tabCreate" onclick="switchTab('register')">Create Account</button>
+                <button type="button" class="auth-tab active" id="tabSignIn" data-auth-tab="login">Sign In</button>
+                <button type="button" class="auth-tab" id="tabCreate" data-auth-tab="register">Create Account</button>
             </div>
 
-            <!-- LOGIN FORM -->
             <div class="auth-form active" id="loginForm">
-                <input type="email" id="loginEmail" placeholder="Email address">
-                <input type="password" id="loginPassword" placeholder="Password">
+                <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email">
+                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
                 <div class="auth-error" id="loginError"></div>
-                <button class="auth-submit" id="loginBtn" onclick="doLogin()">Sign In</button>
+                <button type="button" class="auth-submit" id="loginBtn">Sign In</button>
             </div>
 
-            <!-- REGISTER FORM -->
             <div class="auth-form" id="registerForm">
                 <div class="name-row">
-                    <input type="text" id="regFirstName" placeholder="First name">
-                    <input type="text" id="regLastName" placeholder="Last name">
+                    <input type="text" id="regFirstName" placeholder="First name" autocomplete="given-name">
+                    <input type="text" id="regLastName" placeholder="Last name" autocomplete="last-name">
                 </div>
-                <input type="email" id="regEmail" placeholder="Email address">
-                <input type="password" id="regPassword" placeholder="Password (min 6 chars)">
-                <input type="password" id="regConfirm" placeholder="Confirm password">
+                <input type="email" id="regEmail" placeholder="Email address" autocomplete="email">
+                <input type="password" id="regPassword" placeholder="Password (min 6 chars)" autocomplete="new-password">
+                <input type="password" id="regConfirm" placeholder="Confirm password" autocomplete="new-password">
                 <div class="auth-error" id="registerError"></div>
-                <button class="auth-submit" id="registerBtn" onclick="doRegister()">Create Account</button>
+                <button type="button" class="auth-submit" id="registerBtn">Create Account</button>
             </div>
 
-            <!-- EMAIL VERIFICATION STATE -->
             <div class="verify-box" id="verifyBox">
                 <div class="verify-icon">📬</div>
                 <div class="verify-title">Check your email</div>
                 <p class="verify-msg">We sent a 6-digit code to<br><span id="verifyEmailDisplay"></span></p>
                 <div class="verify-token-row">
-                    <input type="text" id="verifyCode" placeholder="000000" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')">
-                    <button onclick="doVerify()">Verify</button>
+                    <input type="text" id="verifyCode" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+                    <button type="button" id="verifyBtn">Verify</button>
                 </div>
                 <div class="auth-error" id="verifyError"></div>
-                <button class="resend-btn" onclick="doResend()">Resend code</button>
+                <button type="button" class="resend-btn" id="resendBtn">Resend code</button>
             </div>
         </div>
     </div>
-
     </main>
 
-    <script src="js/data.js"></script>
-    <script src="js/pricing.js"></script>
-    <script src="js/script.js"></script>
-    <script src="js/cart.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/footer.js"></script>
-    <script src="js/login.js"></script>
+    <!-- @partial:footer -->
+
+    <script src="js/core/data.js" defer></script>
+    <script src="js/core/product-images.js" defer></script>
+    <script src="js/core/pricing.js" defer></script>
+    <script src="js/core/search.js" defer></script>
+    <script src="js/core/site.js" defer></script>
+    <script src="js/core/cart.js" defer></script>
+    <script src="js/core/auth.js" defer></script>
+    <script src="js/pages/login.js" defer></script>
 </body>
 </html>

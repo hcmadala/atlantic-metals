@@ -2,7 +2,7 @@ const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
 
-const source = fs.readFileSync("js/data.js", "utf8");
+const source = fs.readFileSync("js/core/data.js", "utf8");
 const context = {};
 vm.createContext(context);
 const products = vm.runInContext(`${source}; products;`, context);
